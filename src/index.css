@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased min-h-screen font-sans transition-colors duration-200;
+  }
+
+  /* ============================================================
+     ULTRA-PREMIUM DARK MODE DESIGN SYSTEM
+     ============================================================ */
+  html.dark {
+    color-scheme: dark;
+  }
+
+  html.dark body {
+    background-color: #0b0f19 !important;
+    color: #f3f4f6 !important;
+  }
+
+  /* 1. Main Structural Containers (Cards, Sidebar, Header, Modals) */
+  html.dark .bg-white,
+  html.dark aside,
+  html.dark header,
+  html.dark [role="dialog"] > div,
+  html.dark .modal-content {
+    background-color: #111827 !important;
+    color: #f9fafb !important;
+    border-color: #374151 !important;
+  }
+
+  /* 2. Sub-containers & Card Fills (bg-slate-50 variations) */
+  html.dark [class*="bg-slate-50"] {
+    background-color: #1a2336 !important;
+    color: #e5e7eb !important;
+  }
+
+  /* 3. Section Headers, Table Toolbars & Item Fills (bg-slate-100 variations) */
+  html.dark [class*="bg-slate-100"] {
+    background-color: #1f2937 !important;
+    color: #e5e7eb !important;
+  }
+
+  /* 4. Active Nav Item & Accent Soft Fills */
+  html.dark .bg-blue-50 {
+    background-color: #1e3a8a !important;
+    color: #93c5fd !important;
+  }
+
+  html.dark .text-blue-700 {
+    color: #60a5fa !important;
+  }
+
+  /* 5. Typography Overrides */
+  html.dark .text-slate-900,
+  html.dark .text-slate-800 {
+    color: #f9fafb !important;
+  }
+
+  html.dark .text-slate-700,
+  html.dark .text-slate-600 {
+    color: #e5e7eb !important;
+  }
+
+  html.dark .text-slate-500,
+  html.dark .text-slate-400 {
+    color: #9ca3af !important;
+  }
+
+  /* 6. Form Input Controls, Selects, & Textareas */
+  html.dark input:not([type="checkbox"]):not([type="radio"]),
+  html.dark select,
+  html.dark textarea {
+    background-color: #1f2937 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+  }
+
+  html.dark input::placeholder,
+  html.dark textarea::placeholder {
+    color: #6b7280 !important;
+  }
+
+  html.dark select option {
+    background-color: #111827 !important;
+    color: #f9fafb !important;
+  }
+
+  /* 7. Complete Borders, Dividers & Table Row Lines in Dark Mode */
+  html.dark table,
+  html.dark thead,
+  html.dark tbody,
+  html.dark tr,
+  html.dark th,
+  html.dark td,
+  html.dark [class*="divide-"] > *,
+  html.dark [class*="divide-"] > tr,
+  html.dark .divide-y > *,
+  html.dark .divide-y > tr,
+  html.dark .border-b,
+  html.dark .border-t,
+  html.dark .border-r,
+  html.dark .border-l,
+  html.dark [class*="border-slate-"] {
+    border-color: #1f2937 !important;
+  }
+
+  /* 8. Data Tables & Hover Rows */
+  html.dark tr {
+    background-color: transparent;
+  }
+
+  html.dark thead tr {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+  }
+
+  html.dark tbody tr:hover,
+  html.dark [class*="hover:bg-slate-50"]:hover,
+  html.dark [class*="hover:bg-slate-100"]:hover {
+    background-color: #1e293b !important;
+  }
+
+  /* 9. Buttons & Interactive Shadows */
+  html.dark button:not(.bg-blue-600):not(.bg-red-600):not(.bg-emerald-600) {
+    border-color: #374151;
+  }
+
+  html.dark .shadow-xs,
+  html.dark .shadow-sm,
+  html.dark .shadow-md,
+  html.dark .shadow-xl {
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* 10. Status Badges in Dark Mode */
+  html.dark .bg-emerald-100 {
+    background-color: rgba(6, 78, 59, 0.5) !important;
+    color: #6ee7b7 !important;
+  }
+
+  html.dark .bg-amber-100 {
+    background-color: rgba(120, 53, 15, 0.5) !important;
+    color: #fcd34d !important;
+  }
+
+  html.dark .bg-red-100 {
+    background-color: rgba(127, 29, 29, 0.5) !important;
+    color: #fca5a5 !important;
+  }
+
+  html.dark .bg-blue-100 {
+    background-color: rgba(30, 58, 138, 0.5) !important;
+    color: #93c5fd !important;
+  }
+
+  /* 11. Minimalist Custom Sidebar Scrollbar */
+  .custom-sidebar-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-sidebar-scroll::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+  }
+  .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  html.dark .custom-sidebar-scroll::-webkit-scrollbar-thumb {
+    background: #374151;
+  }
+  html.dark .custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+  }
+}
