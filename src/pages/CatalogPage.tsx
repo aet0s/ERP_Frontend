@@ -108,7 +108,7 @@ function CatalogModal({
               }));
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       } else if (config.type === 'item') {
         api.get('/api/numbering-series/next/item')
           .then(res => {
@@ -119,7 +119,7 @@ function CatalogModal({
               }));
             }
           })
-          .catch(() => {});
+          .catch(() => { });
       }
     }
   }, [config.type, config.row?.id, codeUserEdited]);
@@ -132,7 +132,7 @@ function CatalogModal({
       try {
         const parsed = JSON.parse(config.row.contacts);
         if (Array.isArray(parsed)) parsedContacts = parsed;
-      } catch {}
+      } catch { }
     }
     if (parsedContacts.length > 0) {
       return parsedContacts.map((c: any) => ({
@@ -158,8 +158,8 @@ function CatalogModal({
     config.type === 'vendor'
       ? '/api/vendors'
       : config.type === 'item'
-      ? '/api/items'
-      : '/api/finished-goods';
+        ? '/api/items'
+        : '/api/finished-goods';
 
   const addContact = () => {
     setContacts((prev) => [
@@ -223,6 +223,8 @@ function CatalogModal({
       toast(error.response?.data?.error || 'Unable to save record', 'error');
     }
   };
+
+  //upload comment check
 
   const inputCls = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition";
 
@@ -477,11 +479,10 @@ function ItemDetailDrawer({
                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-300 bg-blue-900/60 px-2.5 py-0.5 rounded-full border border-blue-500/30">
                   <Tag size={11} /> {detail.item_type || 'Raw Material'}
                 </span>
-                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                  (detail.status || 'Active') === 'Active'
+                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${(detail.status || 'Active') === 'Active'
                     ? 'text-emerald-300 bg-emerald-900/60 border-emerald-500/30'
                     : 'text-slate-300 bg-slate-800 border-slate-600'
-                }`}>
+                  }`}>
                   <ShieldCheck size={11} /> {detail.status || 'Active'}
                 </span>
               </div>
@@ -556,19 +557,16 @@ function ItemDetailDrawer({
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Current Stock */}
-            <div className={`p-3.5 rounded-2xl border transition ${
-              isOut ? 'bg-rose-50/70 border-rose-200' : isLow ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50/70 border-emerald-200'
-            }`}>
-              <span className="text-[11px] font-semibold text-slate-600 uppercase block">Available Stock</span>
-              <strong className={`text-xl font-mono block mt-0.5 ${
-                isOut ? 'text-rose-700' : isLow ? 'text-amber-700' : 'text-emerald-700'
+            <div className={`p-3.5 rounded-2xl border transition ${isOut ? 'bg-rose-50/70 border-rose-200' : isLow ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50/70 border-emerald-200'
               }`}>
+              <span className="text-[11px] font-semibold text-slate-600 uppercase block">Available Stock</span>
+              <strong className={`text-xl font-mono block mt-0.5 ${isOut ? 'text-rose-700' : isLow ? 'text-amber-700' : 'text-emerald-700'
+                }`}>
                 {formatNumber(stock)} {detail.unit || 'units'}
               </strong>
               <div className="mt-1">
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 ${
-                  isOut ? 'bg-rose-100 text-rose-800' : isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-                }`}>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 ${isOut ? 'bg-rose-100 text-rose-800' : isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                  }`}>
                   {isOut ? <XCircle size={10} /> : isLow ? <AlertTriangle size={10} /> : <CheckCircle2 size={10} />}
                   {isOut ? 'Out of Stock' : isLow ? 'Low Stock Warning' : 'Healthy Stock Level'}
                 </span>
@@ -778,7 +776,7 @@ function ProductDetailDrawer({
     if (!product?.id) return;
     api.get(`/api/packaging-configs?product_id=${product.id}`)
       .then((res) => setConfigs(res.data || []))
-      .catch(() => {});
+      .catch(() => { });
   }, [product.id]);
 
   const stock = Number(product.available_stock ?? product.current_stock ?? 0);
@@ -851,18 +849,15 @@ function ProductDetailDrawer({
 
         {/* Stock & Valuation KPI Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className={`p-3.5 rounded-2xl border ${
-            isOut ? 'bg-rose-50/70 border-rose-200' : isLow ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50/70 border-emerald-200'
-          }`}>
-            <span className="text-[11px] font-semibold text-slate-600 uppercase block">Current Finished Stock</span>
-            <strong className={`text-xl font-mono block mt-0.5 ${
-              isOut ? 'text-rose-700' : isLow ? 'text-amber-700' : 'text-emerald-700'
+          <div className={`p-3.5 rounded-2xl border ${isOut ? 'bg-rose-50/70 border-rose-200' : isLow ? 'bg-amber-50/70 border-amber-200' : 'bg-emerald-50/70 border-emerald-200'
             }`}>
+            <span className="text-[11px] font-semibold text-slate-600 uppercase block">Current Finished Stock</span>
+            <strong className={`text-xl font-mono block mt-0.5 ${isOut ? 'text-rose-700' : isLow ? 'text-amber-700' : 'text-emerald-700'
+              }`}>
               {formatNumber(stock)} {product.unit || 'units'}
             </strong>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 mt-1 ${
-              isOut ? 'bg-rose-100 text-rose-800' : isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
-            }`}>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold inline-flex items-center gap-1 mt-1 ${isOut ? 'bg-rose-100 text-rose-800' : isLow ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+              }`}>
               {isOut ? 'Out of Stock' : isLow ? 'Low Stock' : 'Ready in Stock'}
             </span>
           </div>
@@ -1111,11 +1106,10 @@ export function CatalogPage({ user: _user }: { user?: any } = {}) {
       key: 'status',
       label: 'Status',
       render: (row) => (
-        <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${
-          (row.status || 'Active') === 'Active'
+        <span className={`text-[11px] px-2 py-0.5 rounded-full font-bold border ${(row.status || 'Active') === 'Active'
             ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
             : 'bg-slate-100 text-slate-600 border-slate-200'
-        }`}>
+          }`}>
           {row.status || 'Active'}
         </span>
       )
@@ -1312,9 +1306,8 @@ export function CatalogPage({ user: _user }: { user?: any } = {}) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex p-1 bg-white border border-slate-200/80 rounded-xl shadow-2xs">
           <button
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition cursor-pointer ${
-              tab === 'items' ? 'bg-blue-50 text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition cursor-pointer ${tab === 'items' ? 'bg-blue-50 text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
             onClick={() => {
               setTab('items');
               clearFilters();
@@ -1323,9 +1316,8 @@ export function CatalogPage({ user: _user }: { user?: any } = {}) {
             Purchasing Items
           </button>
           <button
-            className={`px-4 py-2 text-sm font-semibold rounded-lg transition cursor-pointer ${
-              tab === 'products' ? 'bg-blue-50 text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
+            className={`px-4 py-2 text-sm font-semibold rounded-lg transition cursor-pointer ${tab === 'products' ? 'bg-blue-50 text-blue-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
             onClick={() => {
               setTab('products');
               clearFilters();
