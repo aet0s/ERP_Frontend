@@ -101,6 +101,7 @@ export function SettingsPage({ user }: { user: UserSummary }) {
   const [selectedAuditLog, setSelectedAuditLog] = useState<any | null>(null);
 
   const [billing, setBilling] = useState<any>(null);
+  const [billingForbidden, setBillingForbidden] = useState(false);
   const [permissions, setPermissions] = useState<any[]>([]);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [dark, setDark] = useState(
@@ -147,7 +148,12 @@ export function SettingsPage({ user }: { user: UserSummary }) {
   const load = async () => {
     try {
       const calls: Promise<any>[] = [
-        api.get('/api/billing'),
+        api.get('/api/billing').then(res => ({ data: res.data, forbidden: false })).catch(err => {
+          if (err.response?.status === 403) {
+            return { data: null, forbidden: true };
+          }
+          return { data: null, forbidden: false };
+        }),
         api.get('/api/workspace'),
         api.get('/api/workspace/connection-requests').catch(() => ({ data: { requests: [] } }))
       ];
@@ -156,6 +162,7 @@ export function SettingsPage({ user }: { user: UserSummary }) {
       }
       const [billingRes, wsRes, connRes, permRes] = await Promise.all(calls);
       setBilling(billingRes?.data || null);
+      setBillingForbidden(Boolean(billingRes?.forbidden));
       setConnectionRequests(connRes?.data?.requests || []);
       if (wsRes?.data) {
         setForm(prev => ({
@@ -893,7 +900,16 @@ export function SettingsPage({ user }: { user: UserSummary }) {
           <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
             <CreditCard size={16} className="text-blue-600" /> Subscription & Plan Tier
           </h2>
-          {billing ? (
+          {billingForbidden ? (
+            <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 space-y-1.5 text-xs">
+              <p className="font-semibold flex items-center gap-1.5 text-amber-800 text-sm">
+                <span>🔒</span> Access Restricted
+              </p>
+              <p className="text-amber-700">
+                You do not have permission to view workspace subscription and billing details. Please contact your workspace owner or administrator to request access.
+              </p>
+            </div>
+          ) : billing ? (
             <div className="space-y-3 text-xs">
               <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200/80 rounded-xl">
                 <span className="font-semibold text-slate-600">Current Plan:</span>
