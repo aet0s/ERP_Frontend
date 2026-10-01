@@ -1,7 +1,17 @@
 import axios from 'axios';
 
+const resolveBaseUrl = () => {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'erp.solarman.in') {
+      return 'https://erpmgmt.solarman.in';
+    }
+  }
+  return import.meta.env.DEV ? 'http://localhost:4000' : '';
+};
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:4000' : ''),
+  baseURL: resolveBaseUrl(),
   withCredentials: true
 });
 
