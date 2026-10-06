@@ -88,8 +88,21 @@ export function UserDetailDrawer({
     setTimeout(() => setCopiedEmail(false), 2000);
   };
 
+  const getNormalizedInviteLink = () => {
+    let link = data?.invite_link || (data?.token ? `${window.location.origin}/accept-invite?token=${data.token}` : '');
+    if (link && typeof window !== 'undefined' && window.location.origin && !window.location.hostname.includes('localhost')) {
+      try {
+        const parsed = new URL(link);
+        if (parsed.hostname.includes('localhost') || parsed.hostname.includes('127.0.0.1')) {
+          link = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+        }
+      } catch (_) {}
+    }
+    return link;
+  };
+
   const handleCopyLink = () => {
-    const link = data?.invite_link || (data?.token ? `${window.location.origin}/accept-invite?token=${data.token}` : '');
+    const link = getNormalizedInviteLink();
     if (!link) return;
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
@@ -188,7 +201,7 @@ export function UserDetailDrawer({
                 <input
                   type="text"
                   readOnly
-                  value={data.invite_link || (data.token ? `${window.location.origin}/accept-invite?token=${data.token}` : 'Token generated')}
+                  value={getNormalizedInviteLink() || 'Token generated'}
                   className="w-full bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 font-mono text-[11px] text-slate-700 select-all"
                 />
                 <Button

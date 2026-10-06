@@ -4,7 +4,8 @@ import {
   UserPlus,
   Copy,
   Plus,
-  Check
+  Check,
+  CheckCircle2
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast, useConfirm, useWorkspace } from '../context';
@@ -90,6 +91,7 @@ export function UsersPage({ user }: { user: UserSummary }) {
   // Modal States
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', role: 'staff' });
+  const [createdInvite, setCreatedInvite] = useState<null | { link: string; email: string; role: string }>(null);
   const [sendingInvite, setSendingInvite] = useState(false);
 
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -127,8 +129,23 @@ export function UsersPage({ user }: { user: UserSummary }) {
         email: inviteForm.email.trim(),
         role: inviteForm.role
       });
+
+      let link = res.data?.signup_link || (res.data?.token ? `${window.location.origin}/accept-invite?token=${res.data.token}` : '');
+      if (link && typeof window !== 'undefined' && window.location.origin && !window.location.hostname.includes('localhost')) {
+        try {
+          const parsed = new URL(link);
+          if (parsed.hostname.includes('localhost') || parsed.hostname.includes('127.0.0.1')) {
+            link = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+          }
+        } catch (_) {}
+      }
+
       toast(res.data?.message || 'Invitation sent successfully!', 'success');
-      setInviteModalOpen(false);
+      setCreatedInvite({
+        link,
+        email: inviteForm.email.trim(),
+        role: inviteForm.role
+      });
       setInviteForm({ email: '', role: 'staff' });
       setRefresh((k) => k + 1);
     } catch (err: any) {
@@ -488,46 +505,114 @@ export function UsersPage({ user }: { user: UserSummary }) {
       {/* Invite Member Modal */}
       {inviteModalOpen && (
         <Modal
-          title="Invite Team Member"
-          onClose={() => setInviteModalOpen(false)}
+          title={createdInvite ? "Team Member Invitation Ready" : "Invite Team Member"}
+          onClose={() => {
+            setInviteModalOpen(false);
+            setCreatedInvite(null);
+          }}
         >
-          <form onSubmit={handleSendInvite} className="space-y-4">
-            <Field label="Invitee Email Address">
-              <input
-                type="email"
-                className={inputCls}
-                required
-                placeholder="colleague@company.com"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-              />
-            </Field>
+          {createdInvite ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-emerald-50/80 border border-emerald-200/80 rounded-xl space-y-1">
+                <div className="flex items-center gap-2 text-emerald-900 font-semibold text-sm">
+                  <CheckCircle2 size={16} className="text-emerald-600" />
+                  Invitation Generated Successfully!
+                </div>
+                <p className="text-xs text-emerald-800 leading-relaxed">
+                  Send this link to <span className="font-semibold">{createdInvite.email}</span> to let them activate their account and join as <span className="font-semibold capitalize">{createdInvite.role.replace('_', ' ')}</span>.
+                </p>
+              </div>
 
-            <Field label="Primary Role Assignment">
-              <Select
-                value={inviteForm.role}
-                onChange={(val) => setInviteForm({ ...inviteForm, role: val })}
-                options={assignableRoles}
-              />
-            </Field>
+              <Field label="Direct Invitation Link">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={createdInvite.link}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-800 select-all"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="shrink-0 text-xs py-2 px-3"
+                    icon={<Copy size={14} />}
+                    onClick={() => {
+                      navigator.clipboard.writeText(createdInvite.link);
+                      toast('Invitation link copied to clipboard!', 'success');
+                    }}
+                  >
+                    Copy Link
+                  </Button>
+                </div>
+              </Field>
 
-            {/* Live Role Capabilities Preview */}
-            <RolePermissionsPreview
-              roles={[inviteForm.role]}
-              permissions={matrixPermissions}
-              title="Live Role Capabilities Preview"
-              defaultExpanded={false}
-            />
+              <Field label="Formatted WhatsApp / Email Message Preview">
+                <textarea
+                  readOnly
+                  className="w-full bg-slate-50 border border-slate-300 rounded-lg p-3 text-xs font-mono text-slate-700 h-24"
+                  value={`Hello,\n\nYou have been invited to join ${workspace?.name || 'our platform'} as ${createdInvite.role.replace('_', ' ')}.\n\nPlease accept your invitation and set up your password here:\n${createdInvite.link}`}
+                />
+              </Field>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
-              <Button type="button" variant="secondary" onClick={() => setInviteModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={sendingInvite} icon={<Plus size={16} />}>
-                {sendingInvite ? 'Sending...' : 'Send Invitation'}
-              </Button>
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="primary"
+                  onClick={() => {
+                    setInviteModalOpen(false);
+                    setCreatedInvite(null);
+                  }}
+                >
+                  Done
+                </Button>
+              </div>
             </div>
-          </form>
+          ) : (
+            <form onSubmit={handleSendInvite} className="space-y-4">
+              <Field label="Invitee Email Address">
+                <input
+                  type="email"
+                  className={inputCls}
+                  required
+                  placeholder="colleague@company.com"
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                />
+              </Field>
+
+              <Field label="Primary Role Assignment">
+                <Select
+                  value={inviteForm.role}
+                  onChange={(val) => setInviteForm({ ...inviteForm, role: val })}
+                  options={assignableRoles}
+                />
+              </Field>
+
+              {/* Live Role Capabilities Preview */}
+              <RolePermissionsPreview
+                roles={[inviteForm.role]}
+                permissions={matrixPermissions}
+                title="Live Role Capabilities Preview"
+                defaultExpanded={false}
+              />
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setInviteModalOpen(false);
+                    setCreatedInvite(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={sendingInvite} icon={<Plus size={16} />}>
+                  {sendingInvite ? 'Sending...' : 'Send Invitation'}
+                </Button>
+              </div>
+            </form>
+          )}
         </Modal>
       )}
 

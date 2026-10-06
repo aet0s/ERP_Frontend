@@ -747,9 +747,19 @@ export function PeoplePage() {
         force_reinvite: forceReinvite
       });
 
+      let inviteLink = res.data.invite_link || '';
+      if (inviteLink && typeof window !== 'undefined' && window.location.origin && !window.location.hostname.includes('localhost')) {
+        try {
+          const parsed = new URL(inviteLink);
+          if (parsed.hostname.includes('localhost') || parsed.hostname.includes('127.0.0.1')) {
+            inviteLink = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+          }
+        } catch (_) {}
+      }
+
       toast(res.data.message || 'Portal invitation generated successfully!', 'success');
       setCreatedInvite({
-        link: res.data.invite_link,
+        link: inviteLink,
         email: inviteEmail,
         name: inviteName,
         already_registered: res.data.already_registered,
