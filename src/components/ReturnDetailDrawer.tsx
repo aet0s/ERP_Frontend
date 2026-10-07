@@ -557,7 +557,7 @@ export function ReturnDetailDrawer({
             </div>
 
             {/* Quick Actions for Pending */}
-            {detail.status === 'Pending' && !isVendorReturn && (onReject || onApprove) && (
+            {detail.status === 'Pending' && (onReject || onApprove) && (
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
                 {onReject && (
                   <Button

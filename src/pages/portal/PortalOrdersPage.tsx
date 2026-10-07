@@ -146,14 +146,24 @@ export function PortalOrdersPage() {
     setReturnModalOrder(ord);
     setReturnCategory('Quality / Defect');
     setReturnReasonText('');
-    const items = (ord.items || []).map((it: any) => ({
-      item_id: it.id || it.item_id,
-      item_name: it.item_name,
-      max_quantity: Number(it.quantity || 1),
-      quantity: Number(it.quantity || 1),
-      return_selected: true,
-      notes: ''
-    }));
+    const items = (ord.items || []).map((it: any) => {
+      const rate = Number(it.rate_per_unit || it.rate || 0);
+      const qty = Number(it.quantity || 1);
+      return {
+        item_id: it.id || it.item_id || it.finished_good_id,
+        finished_good_id: it.finished_good_id || it.item_id,
+        item_name: it.item_name || it.name || 'Item',
+        max_quantity: qty,
+        quantity: qty,
+        rate_per_unit: rate,
+        rate: rate,
+        unit: it.unit || 'units',
+        total_price: rate * qty,
+        line_total: rate * qty,
+        return_selected: true,
+        notes: ''
+      };
+    });
     setReturnItems(items);
   };
 
@@ -836,6 +846,38 @@ export function PortalOrdersPage() {
                                 Decline
                               </button>
                             </>
+                          )}
+
+                          {!isVendor && ['Confirmed', 'Confirmed by Customer', 'Sales Order Sent'].includes(ord.status) && (
+                            <button
+                              type="button"
+                              disabled={actionLoading === `${ord.id}-cancel_order`}
+                              onClick={() => {
+                                if (window.confirm('Are you sure you want to cancel this order?')) {
+                                  handleAction(ord.id, 'cancel_order', { reason: 'Order cancelled by customer' });
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 text-[11px] font-bold rounded-lg border border-rose-200 transition cursor-pointer"
+                              title="Cancel this order"
+                            >
+                              Cancel Order
+                            </button>
+                          )}
+
+                          {!isVendor && (ord.status === 'Cancelled' || ord.status === 'Cancelled by Customer') && (
+                            <button
+                              type="button"
+                              disabled={actionLoading === `${ord.id}-delete_order`}
+                              onClick={() => {
+                                if (window.confirm('Remove this cancelled order from your view?')) {
+                                  handleAction(ord.id, 'delete_order');
+                                }
+                              }}
+                              className="px-2 py-1 text-slate-400 hover:text-slate-600 text-[11px] font-medium transition cursor-pointer"
+                              title="Dismiss from history"
+                            >
+                              Dismiss
+                            </button>
                           )}
 
                           {!isVendor && isDispatched(ord.status) && (
@@ -1869,6 +1911,8 @@ export function PortalOrdersPage() {
                               const val = Math.min(it.max_quantity, Math.max(1, Number(e.target.value) || 1));
                               const updated = [...returnItems];
                               updated[idx].quantity = val;
+                              updated[idx].total_price = val * Number(updated[idx].rate_per_unit || 0);
+                              updated[idx].line_total = updated[idx].total_price;
                               setReturnItems(updated);
                             }}
                             className="w-16 h-8 text-center bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-900"
@@ -2039,12 +2083,16 @@ export function PortalOrdersPage() {
                                     <option value="">Base Unit ({selectedProduct?.unit || 'Units'})</option>
                                   ) : (
                                     <>
-                                      {packagingOptions.map((pkg: any) => (
-                                        <option key={pkg.id} value={pkg.id}>
-                                          {pkg.package_name} ({pkg.units_per_package} {selectedProduct?.unit || pkg.package_unit}) — {formatCurrency(pkg.selling_price || (Number(selectedProduct?.default_price || 0) * Number(pkg.units_per_package)), activeWorkspace.currency)}
-                                        </option>
-                                      ))}
-                                      <option value="">Loose / Base ({selectedProduct?.unit || 'Units'}) — {formatCurrency(selectedProduct?.default_price || 0, activeWorkspace.currency)}</option>
+                                      {packagingOptions.map((pkg: any) => {
+                                        const pPrice = Number(pkg.selling_price || 0) || (Number(selectedProduct?.default_price || 0) * (Number(pkg.units_per_package) || 1));
+                                        const pTax = Number(selectedProduct?.tax_rate || 18);
+                                        return (
+                                          <option key={pkg.id} value={pkg.id}>
+                                            {pkg.package_name} ({pkg.units_per_package} {selectedProduct?.unit || pkg.package_unit}) — {formatCurrency(pPrice, activeWorkspace.currency)} (Excl. GST) | {formatCurrency(pPrice * (1 + pTax / 100), activeWorkspace.currency)} (Incl. GST)
+                                          </option>
+                                        );
+                                      })}
+                                      <option value="">Loose / Base ({selectedProduct?.unit || 'Units'}) — {formatCurrency(selectedProduct?.default_price || 0, activeWorkspace.currency)} (Excl. GST) | {formatCurrency((Number(selectedProduct?.default_price || 0) * (1 + (Number(selectedProduct?.tax_rate || 18) / 100))), activeWorkspace.currency)} (Incl. GST)</option>
                                     </>
                                   )}
                                 </select>
@@ -2088,7 +2136,7 @@ export function PortalOrdersPage() {
                             {/* Line pricing display */}
                             {row.product_id && (
                               <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-200/60 font-mono">
-                                <span>Rate: {formatCurrency(row.rate, activeWorkspace.currency)} / unit</span>
+                                <span>Rate: {formatCurrency(row.rate, activeWorkspace.currency)} (Excl. GST) · {formatCurrency(row.rate * (1 + (Number(selectedProduct?.tax_rate || 18) / 100)), activeWorkspace.currency)} (Incl. GST)</span>
                                 <span className="font-bold text-slate-800">
                                   Line Total: {formatCurrency(row.rate * row.quantity, activeWorkspace.currency)}
                                 </span>

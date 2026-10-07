@@ -124,13 +124,40 @@ function VendorPaymentModal({
           <div className="flex justify-between text-slate-600">
             <span>Total Bill Amount:</span> <strong className="text-slate-900">{formatCurrency(currentProc.total_amount, workspace?.currency)}</strong>
           </div>
+          {Number(currentProc.returned_amount || 0) > 0 && (
+            <>
+              <div className="flex justify-between text-amber-700 font-semibold">
+                <span>Returned Goods Value (Debit Note):</span> <strong>-{formatCurrency(currentProc.returned_amount, workspace?.currency)}</strong>
+              </div>
+              <div className="flex justify-between text-blue-900 font-bold">
+                <span>Net Payable for Kept Goods:</span> <strong>{formatCurrency(currentProc.net_total || (Number(currentProc.total_amount) - Number(currentProc.returned_amount)), workspace?.currency)}</strong>
+              </div>
+            </>
+          )}
           <div className="flex justify-between text-slate-600">
             <span>Amount Paid So Far:</span> <strong className="text-emerald-700 font-bold">{formatCurrency(currentProc.amount_paid, workspace?.currency)}</strong>
           </div>
-          <div className="flex justify-between text-slate-700 font-bold border-t border-slate-200 pt-1.5">
-            <span>Current Amount Due:</span> <strong className="text-red-600 font-bold">{formatCurrency(currentProc.amount_due, workspace?.currency)}</strong>
-          </div>
+          {Number(currentProc.amount_to_return || 0) > 0 ? (
+            <div className="flex justify-between text-purple-700 font-bold border-t border-purple-200 pt-1.5 bg-purple-50 p-2 rounded-lg">
+              <span>Amount to be Returned by Vendor (Refund Due):</span> <strong className="text-purple-800 font-bold text-sm">{formatCurrency(currentProc.amount_to_return, workspace?.currency)}</strong>
+            </div>
+          ) : (
+            <div className="flex justify-between text-slate-700 font-bold border-t border-slate-200 pt-1.5">
+              <span>Current Amount Due (Kept Goods):</span> <strong className="text-red-600 font-bold">{formatCurrency(currentProc.amount_due, workspace?.currency)}</strong>
+            </div>
+          )}
         </div>
+
+        {Number(currentProc.amount_to_return || 0) > 0 && (
+          <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl text-purple-900 text-xs space-y-1">
+            <span className="font-bold flex items-center gap-1.5 text-purple-800">
+              <RotateCcw size={14} /> Overpayment / Refund Due:
+            </span>
+            <p>
+              You have paid {formatCurrency(currentProc.amount_paid, workspace?.currency)}, but after accepted returns ({formatCurrency(currentProc.returned_amount, workspace?.currency)}), the net cost of kept materials is {formatCurrency(currentProc.net_total || (Number(currentProc.total_amount) - Number(currentProc.returned_amount)), workspace?.currency)}. The vendor owes you a refund of <strong>{formatCurrency(currentProc.amount_to_return, workspace?.currency)}</strong>. No additional payment is required.
+            </p>
+          </div>
+        )}
 
         {/* Payment History Log Table */}
         <div className="space-y-2">
@@ -189,7 +216,7 @@ function VendorPaymentModal({
           </form>
         ) : (
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center text-xs font-bold text-emerald-800">
-            ✓ Procurement is fully paid to vendor! No balance due.
+            ✓ Payment for kept goods is complete! No balance due.
           </div>
         )}
       </div>
@@ -212,7 +239,6 @@ export function ProcurementPage() {
 
   const [showDnModal, setShowDnModal] = useState(false);
   const [showOwnerReturnModal, setShowOwnerReturnModal] = useState<any | null>(null);
-  const [ownerReturnReason, setOwnerReturnReason] = useState('');
 
   const [tableLocationFilter, setTableLocationFilter] = useState('');
   const [tableVendorFilter, setTableVendorFilter] = useState('');
@@ -271,22 +297,28 @@ export function ProcurementPage() {
     });
   };
 
-  const calculatedSubtotal = lineItems.reduce((acc, row) => {
+  const discountRate = Math.min(100, Math.max(0, Number(discountPercent) || 0));
+
+  const grossSubtotal = lineItems.reduce((acc, row) => {
     const q = Number(row.quantity) || 0;
     const r = Number(row.rate_per_unit) || 0;
     return acc + q * r;
   }, 0);
 
+  const calculatedDiscountAmount = (grossSubtotal * discountRate) / 100;
+  const taxableSubtotal = grossSubtotal - calculatedDiscountAmount;
+
+  // Discount is given on MRP (quantity * rate) first, and then GST or Tax is calculated on that discounted MRP:
+  const discountFactor = 1 - (discountRate / 100);
   const calculatedTax = lineItems.reduce((acc, row) => {
     const q = Number(row.quantity) || 0;
     const r = Number(row.rate_per_unit) || 0;
     const t = Number(row.tax_rate) || 0;
-    return acc + (q * r * t) / 100;
+    const lineDiscountedMRP = (q * r) * discountFactor;
+    return acc + (lineDiscountedMRP * t) / 100;
   }, 0);
 
-  const discountRate = Math.min(100, Math.max(0, Number(discountPercent) || 0));
-  const calculatedDiscountAmount = (calculatedSubtotal * discountRate) / 100;
-  const overallTotal = Math.max(0, calculatedSubtotal + calculatedTax - calculatedDiscountAmount);
+  const overallTotal = taxableSubtotal + calculatedTax;
 
   const submitProcurement = async (e: FormEvent) => {
     e.preventDefault();
@@ -338,7 +370,6 @@ export function ProcurementPage() {
 
   const handleReturnToVendor = async (row: any) => {
     setShowOwnerReturnModal(row);
-    setOwnerReturnReason(`Defective / Substandard material return from procurement dated ${formatDate(row.date)}`);
   };
 
   const handleReceiveProcurement = async (row: any) => {
@@ -455,7 +486,18 @@ export function ProcurementPage() {
       label: 'Vendor Dues',
       align: 'right',
       render: (row) => {
+        const refundDue = Number(row.amount_to_return || 0);
         const due = Number(row.amount_due ?? (Number(row.total_amount) - Number(row.amount_paid || 0)));
+        if (refundDue > 0) {
+          return (
+            <div className="flex flex-col items-end">
+              <span className="font-bold text-rose-700 font-mono text-xs">
+                Refund: {formatCurrency(refundDue, workspace?.currency)}
+              </span>
+              <span className="text-[10px] text-rose-500 font-medium">To be returned</span>
+            </div>
+          );
+        }
         return (
           <span className={`font-semibold ${due > 0 ? 'text-amber-700 font-mono text-xs' : 'text-slate-400 text-xs'}`}>
             {due > 0 ? formatCurrency(due, workspace?.currency) : '—'}
@@ -504,16 +546,36 @@ export function ProcurementPage() {
               </>
             )}
 
-            {/* Pay Vendor button is visible only if user has create or edit permission */}
+            {/* Pay Vendor button is visible only if user has create or edit permission and there is due balance */}
             {(canCreate || canEdit) && (
-              <button
-                type="button"
-                onClick={() => setPaymentProcurement(row)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-200 shadow-2xs transition cursor-pointer"
-                title="Record payment or view payment history"
-              >
-                ₹ Pay Vendor
-              </button>
+              Number(row.amount_due || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setPaymentProcurement(row)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-200 shadow-2xs transition cursor-pointer"
+                  title="Record payment for kept goods"
+                >
+                  ₹ Pay Vendor
+                </button>
+              ) : Number(row.amount_to_return || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setPaymentProcurement(row)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-xl border border-rose-200 shadow-2xs transition cursor-pointer"
+                  title="Vendor overpaid: Refund due"
+                >
+                  <RotateCcw size={12} /> Refund Due
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPaymentProcurement(row)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs transition cursor-pointer"
+                  title="View payment logs"
+                >
+                  Log
+                </button>
+              )
             )}
           </div>
         );
@@ -634,14 +696,15 @@ export function ProcurementPage() {
                 <div className="p-3 bg-slate-100/70 border-t border-slate-200 flex justify-between items-center">
                   <Button type="button" variant="secondary" icon={<Plus size={15} />} onClick={addLine}>Add Another Item Line</Button>
                   <div className="text-right text-xs font-semibold text-slate-700 space-y-1">
-                    <div>Subtotal: <span className="text-slate-900">{formatCurrency(calculatedSubtotal, workspace?.currency)}</span></div>
-                    <div>Est. Tax: <span className="text-slate-900">{formatCurrency(calculatedTax, workspace?.currency)}</span></div>
+                    <div>Gross MRP: <span className="text-slate-900">{formatCurrency(grossSubtotal, workspace?.currency)}</span></div>
                     {discountRate > 0 && (
                       <div className="text-emerald-700 font-medium flex items-center justify-end gap-1">
                         <span>Discount ({discountRate}%):</span>
                         <span className="font-bold font-mono">-{formatCurrency(calculatedDiscountAmount, workspace?.currency)}</span>
                       </div>
                     )}
+                    <div>Taxable (Discounted MRP): <span className="text-slate-900">{formatCurrency(taxableSubtotal, workspace?.currency)}</span></div>
+                    <div>GST Tax: <span className="text-slate-900">+{formatCurrency(calculatedTax, workspace?.currency)}</span></div>
                     <div className="text-sm font-bold text-blue-700 pt-0.5 border-t border-slate-200/80">
                       <span>Overall Total: </span>
                       <span className="font-mono">{formatCurrency(overallTotal, workspace?.currency)}</span>
@@ -859,49 +922,274 @@ export function ProcurementPage() {
       ) : null}
       {showDnModal ? <CreateDebitNoteModal onClose={() => setShowDnModal(false)} onSaved={() => { setRefresh((v) => v + 1); setShowDnModal(false); }} /> : null}
       {showOwnerReturnModal && (
-        <Modal title={`Initiate Return: ${showOwnerReturnModal.procurement_number || showOwnerReturnModal.id}`} onClose={() => setShowOwnerReturnModal(null)}>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!ownerReturnReason.trim()) return;
-              try {
-                await api.post('/api/return-requests', {
-                  reference_id: showOwnerReturnModal.id,
-                  reference_type: 'procurement',
-                  request_type: 'purchase_return',
-                  reason: ownerReturnReason.trim(),
-                  vendor_id: showOwnerReturnModal.vendor_id,
-                  items: showOwnerReturnModal.items || []
-                });
-                toast('Purchase Return Request submitted to vendor!', 'success');
-                setShowOwnerReturnModal(null);
-                setOwnerReturnReason('');
-                setRefresh((v) => v + 1);
-              } catch (err: any) {
-                toast(err.response?.data?.error || 'Failed to submit return request', 'error');
-              }
-            }}
-            className="space-y-4"
-          >
-            <p className="text-xs text-slate-600">Submit a return request to the vendor for received items from this procurement.</p>
-            <Field label="Reason for Return">
-              <textarea
-                required
-                rows={3}
-                placeholder="Describe reason for returning items to vendor..."
-                value={ownerReturnReason}
-                onChange={(e) => setOwnerReturnReason(e.target.value)}
-                className={formInputCls}
-              />
-            </Field>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="secondary" onClick={() => setShowOwnerReturnModal(null)}>Cancel</Button>
-              <Button type="submit" icon={<RotateCcw size={14} />}>Submit Return Request</Button>
-            </div>
-          </form>
-        </Modal>
+        <OwnerReturnModal
+          procurement={showOwnerReturnModal}
+          onClose={() => setShowOwnerReturnModal(null)}
+          onSaved={() => {
+            setRefresh((v) => v + 1);
+            setShowOwnerReturnModal(null);
+          }}
+        />
       )}
     </div>
+  );
+}
+
+function OwnerReturnModal({
+  procurement,
+  onClose,
+  onSaved
+}: {
+  procurement: any;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { workspace } = useWorkspace();
+  const toast = useToast();
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [reason, setReason] = useState(`Defective / Substandard material return from procurement dated ${formatDate(procurement.date)}`);
+  const [returnItems, setReturnItems] = useState<Array<{
+    item_id: string;
+    item_name: string;
+    item_code?: string;
+    unit: string;
+    received_quantity: number;
+    return_quantity: number;
+    rate_per_unit: number;
+    selected: boolean;
+  }>>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    api.get(`/api/procurements/${procurement.id}`)
+      .then((res) => {
+        if (!mounted) return;
+        const proc = res.data;
+        const rawItems = proc.items || [];
+        if (rawItems.length > 0) {
+          setReturnItems(
+            rawItems.map((it: any) => ({
+              item_id: it.item_id || it.raw_material_id || it.id,
+              item_name: it.item_name || 'Item',
+              item_code: it.item_code || '',
+              unit: it.unit || 'units',
+              received_quantity: Number(it.quantity || 0),
+              return_quantity: Number(it.quantity || 0),
+              rate_per_unit: Number(it.rate_per_unit || 0),
+              selected: true
+            }))
+          );
+        } else {
+          setReturnItems([
+            {
+              item_id: proc.raw_material_id || proc.id,
+              item_name: proc.material_name || proc.item_name || 'Procured Material',
+              unit: 'units',
+              received_quantity: Number(proc.quantity || 1),
+              return_quantity: Number(proc.quantity || 1),
+              rate_per_unit: Number(proc.rate_per_unit || 0),
+              selected: true
+            }
+          ]);
+        }
+      })
+      .catch(() => {
+        toast('Failed to load procurement items for return', 'error');
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [procurement.id]);
+
+  const toggleSelect = (idx: number) => {
+    setReturnItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, selected: !item.selected } : item))
+    );
+  };
+
+  const updateQuantity = (idx: number, qtyStr: string) => {
+    setReturnItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== idx) return item;
+        const num = Number(qtyStr);
+        return {
+          ...item,
+          return_quantity: isNaN(num) ? 0 : Math.min(item.received_quantity, Math.max(0, num))
+        };
+      })
+    );
+  };
+
+  const selectedItems = returnItems.filter((it) => it.selected && it.return_quantity > 0);
+  const totalReturnValue = selectedItems.reduce(
+    (acc, it) => acc + it.return_quantity * it.rate_per_unit,
+    0
+  );
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) return toast('Please enter a return reason', 'error');
+    if (selectedItems.length === 0)
+      return toast('Please select at least one item with a valid return quantity', 'error');
+
+    setSubmitting(true);
+    try {
+      await api.post('/api/return-requests', {
+        reference_id: procurement.id,
+        reference_type: 'procurement',
+        request_type: 'purchase_return',
+        reason: reason.trim(),
+        vendor_id: procurement.vendor_id,
+        items: selectedItems.map((it) => ({
+          item_id: it.item_id,
+          item_name: it.item_name,
+          quantity: it.return_quantity,
+          rate_per_unit: it.rate_per_unit,
+          line_total: it.return_quantity * it.rate_per_unit
+        }))
+      });
+      toast(
+        'Purchase Return Request submitted! Once approved by staff or vendor, raw material inventory will be reduced & debit note issued.',
+        'success'
+      );
+      onSaved();
+    } catch (err: any) {
+      toast(err.response?.data?.error || 'Failed to submit return request', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const inputCls =
+    'w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition shadow-2xs';
+
+  return (
+    <Modal
+      title={`Initiate Return: ${procurement.procurement_number || procurement.id}`}
+      onClose={onClose}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs">
+          <div className="flex justify-between text-slate-600">
+            <span>Vendor:</span>{' '}
+            <strong className="text-slate-900 font-bold">{procurement.vendor_name || 'Vendor'}</strong>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>Order Date:</span>{' '}
+            <strong className="text-slate-800">{formatDate(procurement.date)}</strong>
+          </div>
+          <div className="flex justify-between text-slate-600">
+            <span>Original Total:</span>{' '}
+            <strong className="text-slate-900">
+              {formatCurrency(procurement.total_amount, workspace?.currency)}
+            </strong>
+          </div>
+        </div>
+
+        <Field label="Reason for Returning to Vendor *">
+          <textarea
+            required
+            rows={2}
+            className={inputCls}
+            placeholder="Explain reason for return (e.g. damaged goods, defective quality, wrong spec)..."
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+          />
+        </Field>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+              Select Items & Return Quantities
+            </span>
+            <span className="text-xs font-semibold text-rose-700">
+              Return Value: {formatCurrency(totalReturnValue, workspace?.currency)}
+            </span>
+          </div>
+
+          {loading ? (
+            <div className="h-28 bg-slate-100 rounded-xl animate-pulse" />
+          ) : returnItems.length > 0 ? (
+            <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 bg-white">
+              <div className="bg-slate-900 text-white text-[11px] font-semibold px-3 py-2 grid grid-cols-12 gap-2 items-center">
+                <div className="col-span-1 text-center">✓</div>
+                <div className="col-span-5">MATERIAL / ITEM</div>
+                <div className="col-span-2 text-right">RCVD QTY</div>
+                <div className="col-span-2 text-right">RETURN QTY</div>
+                <div className="col-span-2 text-right">RETURN AMT</div>
+              </div>
+
+              {returnItems.map((item, idx) => {
+                const lineTotal = (item.return_quantity || 0) * (item.rate_per_unit || 0);
+                return (
+                  <div
+                    key={item.item_id || idx}
+                    className={`p-2.5 grid grid-cols-12 gap-2 items-center text-xs transition ${
+                      item.selected ? 'bg-white' : 'bg-slate-50/70 opacity-60'
+                    }`}
+                  >
+                    <div className="col-span-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        onChange={() => toggleSelect(idx)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer h-4 w-4"
+                      />
+                    </div>
+                    <div className="col-span-5">
+                      <strong className="text-slate-900 block truncate">{item.item_name}</strong>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Rate: {formatCurrency(item.rate_per_unit, workspace?.currency)}/{item.unit}
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-right font-medium text-slate-600">
+                      {item.received_quantity} {item.unit}
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        max={item.received_quantity}
+                        disabled={!item.selected}
+                        value={item.return_quantity}
+                        onChange={(e) => updateQuantity(idx, e.target.value)}
+                        className="w-full text-right font-bold text-slate-900 border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-600 disabled:bg-slate-100"
+                      />
+                    </div>
+                    <div className="col-span-2 text-right font-mono font-bold text-slate-800">
+                      {formatCurrency(lineTotal, workspace?.currency)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-4 text-center bg-slate-50 rounded-xl text-slate-500 text-xs italic">
+              No items found in this procurement.
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-200">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            icon={<RotateCcw size={14} />}
+            disabled={submitting || selectedItems.length === 0}
+          >
+            {submitting ? 'Submitting...' : 'Submit Return Request'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

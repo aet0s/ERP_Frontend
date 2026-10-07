@@ -809,10 +809,19 @@ function ProductDetailDrawer({
 
             <div className="text-right">
               <span className="text-xs font-medium text-slate-400 block mb-0.5">Catalog Selling Price</span>
-              <span className="text-2xl font-extrabold text-emerald-400 font-mono">
-                {formatCurrency(defaultPrice, workspace?.currency)}
-              </span>
-              <span className="text-[10px] text-slate-400 block font-mono">
+              <div className="flex items-baseline justify-end gap-2">
+                <span className="text-2xl font-extrabold text-emerald-400 font-mono">
+                  {formatCurrency(defaultPrice, workspace?.currency)}
+                </span>
+                <span className="text-[11px] font-semibold text-slate-300">
+                  (Excl. GST)
+                </span>
+              </div>
+              <div className="text-xs text-emerald-300 font-semibold font-mono mt-0.5">
+                {formatCurrency(defaultPrice * (1 + (Number(product.tax_rate != null ? product.tax_rate : 18) / 100)), workspace?.currency)}{' '}
+                <span className="text-[10px] text-slate-400 font-normal font-sans">(Incl. {product.tax_rate != null ? product.tax_rate : 18}% GST)</span>
+              </div>
+              <span className="text-[10px] text-slate-400 block font-mono mt-0.5">
                 per {product.unit || 'unit'}
               </span>
             </div>

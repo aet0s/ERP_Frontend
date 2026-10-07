@@ -309,16 +309,12 @@ export function ReturnRequestsPage() {
       align: 'right',
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5">
-          {canApprove && row.status === 'Pending' && !(
-            row.return_direction === 'vendor' ||
-            ['purchase_return', 'purchase_cancellation'].includes(row.request_type) ||
-            Boolean(row.vendor_id)
-          ) && (
+          {canApprove && row.status === 'Pending' && (
             <>
               <button
                 onClick={() => { setSelectedRequest(row); setActionType('approve'); }}
                 className="flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition cursor-pointer"
-                title="Approve Request"
+                title="Approve / Accept Return Request"
               >
                 <CheckCircle2 size={12} /> Approve
               </button>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   Download, CreditCard, User,
   Package, Truck,
-  Plus, Copy, Check
+  Plus, Copy, Check, RotateCcw
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate, formatNumber } from '../lib/utils';
@@ -427,10 +427,40 @@ export function SalesDetailDrawer({
               </div>
             )}
 
+            {Number(sale.returned_amount || 0) > 0 && (
+              <div className="flex justify-between text-purple-700 font-medium">
+                <span>Returned Goods (Credit Notes):</span>
+                <span className="font-semibold">-{formatCurrency(sale.returned_amount, currency)}</span>
+              </div>
+            )}
+
+            {Number(sale.returned_amount || 0) > 0 && (
+              <div className="flex justify-between text-blue-700 font-semibold">
+                <span>Net Total (Kept Goods):</span>
+                <span>{formatCurrency(sale.net_total, currency)}</span>
+              </div>
+            )}
+
             <div className="flex justify-between text-slate-900 font-bold border-t border-slate-200 pt-2 text-sm">
               <span>Grand Total Amount:</span>
               <span className="text-blue-700">{formatCurrency(sale.total_amount, currency)}</span>
             </div>
+
+            {Number(sale.amount_to_return || 0) > 0 && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-rose-600 shrink-0" />
+                  <div>
+                    <span className="font-bold text-rose-900 block">
+                      Refund Due to Customer: {formatCurrency(sale.amount_to_return, currency)}
+                    </span>
+                    <span className="text-[11px] text-rose-600">
+                      Customer has returned items and was previously charged more than retained amount.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Paid / Due Balance Cards */}
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200">
@@ -438,9 +468,21 @@ export function SalesDetailDrawer({
                 <span className="block text-[10px] uppercase font-bold text-emerald-700">Amount Received</span>
                 <span className="text-xs font-extrabold text-emerald-800">{formatCurrency(sale.amount_received || 0, currency)}</span>
               </div>
-              <div className={`p-2.5 rounded-xl text-center border ${Number(sale.amount_due || 0) > 0 ? 'bg-red-50 border-red-200 text-red-800' : 'bg-slate-100 border-slate-200 text-slate-600'}`}>
-                <span className="block text-[10px] uppercase font-bold">Balance Due</span>
-                <span className="text-xs font-extrabold">{formatCurrency(sale.amount_due || 0, currency)}</span>
+              <div className={`p-2.5 rounded-xl text-center border ${
+                Number(sale.amount_to_return || 0) > 0
+                  ? 'bg-rose-50 border-rose-200 text-rose-800'
+                  : Number(sale.amount_due || 0) > 0
+                  ? 'bg-red-50 border-red-200 text-red-800'
+                  : 'bg-slate-100 border-slate-200 text-slate-600'
+              }`}>
+                <span className="block text-[10px] uppercase font-bold">
+                  {Number(sale.amount_to_return || 0) > 0 ? 'Refund Due' : 'Balance Due'}
+                </span>
+                <span className="text-xs font-extrabold">
+                  {Number(sale.amount_to_return || 0) > 0
+                    ? formatCurrency(sale.amount_to_return, currency)
+                    : formatCurrency(sale.amount_due || 0, currency)}
+                </span>
               </div>
             </div>
           </div>

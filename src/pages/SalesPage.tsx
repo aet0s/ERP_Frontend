@@ -99,13 +99,44 @@ function CustomerPaymentModal({
           <div className="flex justify-between text-slate-600">
             <span>Total Bill Amount:</span> <strong className="text-slate-900">{formatCurrency(currentSale.total_amount, workspace?.currency)}</strong>
           </div>
+          {Number(currentSale.returned_amount || 0) > 0 && (
+            <div className="flex justify-between text-purple-700 font-medium">
+              <span>Returned Goods (Credit Notes):</span> <strong>-{formatCurrency(currentSale.returned_amount, workspace?.currency)}</strong>
+            </div>
+          )}
+          {Number(currentSale.returned_amount || 0) > 0 && (
+            <div className="flex justify-between text-blue-700 font-semibold">
+              <span>Net Bill for Kept Items:</span> <strong>{formatCurrency(currentSale.net_total, workspace?.currency)}</strong>
+            </div>
+          )}
           <div className="flex justify-between text-slate-600">
             <span>Amount Received So Far:</span> <strong className="text-emerald-700 font-bold">{formatCurrency(currentSale.amount_received, workspace?.currency)}</strong>
           </div>
           <div className="flex justify-between text-slate-700 font-bold border-t border-slate-200 pt-1.5">
-            <span>Current Amount Due:</span> <strong className="text-red-600 font-bold">{formatCurrency(currentSale.amount_due, workspace?.currency)}</strong>
+            <span>Current Amount Due:</span> <strong className={Number(currentSale.amount_due || 0) > 0 ? 'text-red-600 font-bold' : 'text-slate-500'}>{formatCurrency(currentSale.amount_due || 0, workspace?.currency)}</strong>
           </div>
+          {Number(currentSale.amount_to_return || 0) > 0 && (
+            <div className="flex justify-between text-rose-700 font-bold border-t border-rose-200 pt-1.5 bg-rose-50 -mx-3.5 px-3.5 py-1 rounded-b-lg">
+              <span>Amount to be Returned to Customer:</span> <strong className="text-rose-700 font-extrabold">{formatCurrency(currentSale.amount_to_return, workspace?.currency)}</strong>
+            </div>
+          )}
         </div>
+
+        {Number(currentSale.amount_to_return || 0) > 0 && (
+          <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <RotateCcw className="w-4 h-4 text-rose-600 shrink-0" />
+              <div>
+                <span className="font-bold text-rose-900 block">
+                  Refund Due to Customer: {formatCurrency(currentSale.amount_to_return, workspace?.currency)}
+                </span>
+                <span className="text-[11px] text-rose-600">
+                  Customer has returned goods and previously paid more than the kept value. Please process a refund to customer.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Installment History Log Table */}
         <div className="space-y-2">
@@ -162,9 +193,13 @@ function CustomerPaymentModal({
               <Button type="submit" icon={<Plus size={15} />}>Record Installment Payment</Button>
             </div>
           </form>
+        ) : Number(currentSale.amount_to_return || 0) > 0 ? (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-center text-xs font-bold text-rose-800">
+            ⚠️ Overpaid: {formatCurrency(currentSale.amount_to_return, workspace?.currency)} to be refunded to customer.
+          </div>
         ) : (
           <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-center text-xs font-bold text-emerald-800">
-            ✓ Invoice is fully paid! No balance due.
+            ✓ Invoice is fully settled! No balance due.
           </div>
         )}
       </div>
@@ -646,22 +681,28 @@ export function SalesPage() {
   );
 
   // Tax and Rounding Preview Logic
-  const workspaceState = (workspace as any)?.state || 'Delhi';
-  const isInterstate = workspaceState.trim().toLowerCase() !== placeOfSupply.trim().toLowerCase();
+  const discountRate = Math.min(100, Math.max(0, Number(discountPercent) || 0));
 
-  let subtotal = 0;
+  const grossSubtotal = lineItems.reduce((acc, row) => {
+    const q = Number(row.quantity) || 0;
+    const r = Number(row.rate_per_unit) || 0;
+    return acc + q * r;
+  }, 0);
+
+  const calculatedDiscountAmount = (grossSubtotal * discountRate) / 100;
+  const taxableSubtotal = grossSubtotal - calculatedDiscountAmount;
+
+  // Discount is given on MRP (quantity * rate) first, and then GST or Tax is calculated on that discounted MRP:
+  const discountFactor = 1 - (discountRate / 100);
   let totalTax = 0;
   let stockValidationError = '';
 
   lineItems.forEach((line, idx) => {
-    const qty = Number(line.quantity) || 0;
-    const rate = Number(line.rate_per_unit) || 0;
-    const disc = Number(line.discount_percent) || 0;
+    const q = Number(line.quantity) || 0;
+    const r = Number(line.rate_per_unit) || 0;
     const taxPct = Number(line.tax_rate) || 0;
-
-    const lineTaxable = (qty * rate) * (1 - disc / 100);
-    const lineTax = lineTaxable * (taxPct / 100);
-    subtotal += lineTaxable;
+    const lineDiscountedMRP = (q * r) * discountFactor;
+    const lineTax = (lineDiscountedMRP * taxPct) / 100;
     totalTax += lineTax;
 
     if (line.finished_good_id) {
@@ -675,15 +716,13 @@ export function SalesPage() {
 
       if (availableInUnit <= 0) {
         stockValidationError = `Line ${idx + 1}: "${matchedFg?.name} (${unitName})" is out of stock (0 available). Cannot sell unproduced packaging tier!`;
-      } else if (qty > availableInUnit) {
-        stockValidationError = `Line ${idx + 1}: Requested ${qty} ${unitName} of "${matchedFg?.name}${activePkg ? ` (${activePkg.name || activePkg.package_name})` : ''}", but only ${availableInUnit} ${unitName} available in stock!`;
+      } else if (q > availableInUnit) {
+        stockValidationError = `Line ${idx + 1}: Requested ${q} ${unitName} of "${matchedFg?.name}${activePkg ? ` (${activePkg.name || activePkg.package_name})` : ''}", but only ${availableInUnit} ${unitName} available in stock!`;
       }
     }
   });
 
-  const discountRate = Math.min(100, Math.max(0, Number(discountPercent) || 0));
-  const calculatedDiscountAmount = (subtotal * discountRate) / 100;
-  const preRoundingTotal = Math.max(0, subtotal + totalTax - calculatedDiscountAmount);
+  const preRoundingTotal = taxableSubtotal + totalTax;
   const grandTotal = Math.round(preRoundingTotal);
   const roundOffAmount = grandTotal - preRoundingTotal;
 
@@ -793,7 +832,31 @@ export function SalesPage() {
     { key: 'total_quantity', label: 'Quantity', sortable: true, align: 'right', render: (row) => formatNumber(row.total_quantity || row.quantity) },
     { key: 'total_amount', label: 'Grand Total', sortable: true, align: 'right', render: (row) => formatCurrency(row.total_amount || (row.quantity * row.rate_per_unit), workspace?.currency) },
     { key: 'amount_received', label: 'Received', sortable: true, align: 'right', render: (row) => formatCurrency(row.amount_received, workspace?.currency) },
-    { key: 'amount_due', label: 'Due', sortable: true, align: 'right', render: (row) => formatCurrency(row.amount_due, workspace?.currency) },
+    {
+      key: 'amount_due',
+      label: 'Due',
+      sortable: true,
+      align: 'right',
+      render: (row) => {
+        const refundDue = Number(row.amount_to_return || 0);
+        const due = Number(row.amount_due || 0);
+        if (refundDue > 0) {
+          return (
+            <div className="flex flex-col items-end">
+              <span className="font-bold text-rose-700 font-mono text-xs">
+                Refund: {formatCurrency(refundDue, workspace?.currency)}
+              </span>
+              <span className="text-[10px] text-rose-500 font-medium">To be returned</span>
+            </div>
+          );
+        }
+        return (
+          <span className={`font-semibold ${due > 0 ? 'text-amber-700 font-mono text-xs' : 'text-slate-400 text-xs'}`}>
+            {due > 0 ? formatCurrency(due, workspace?.currency) : '—'}
+          </span>
+        );
+      }
+    },
     {
       key: 'status',
       label: 'Status',
@@ -884,23 +947,36 @@ export function SalesPage() {
               </span>
             )}
 
-            {/* 5. Payment Button */}
+            {/* 5. Payment Button - Only show Pay if there is balance due for kept goods */}
             {(canCreate || canEdit) && (
-              <button
-                type="button"
-                onClick={() => setPaymentSale(row)}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-200 shadow-2xs transition cursor-pointer"
-              >
-                {Number(row.amount_due || 0) > 0 ? (
-                  <>
-                    <Plus size={13} /> Pay
-                  </>
-                ) : (
-                  <>
-                    <FileText size={13} /> Log
-                  </>
-                )}
-              </button>
+              Number(row.amount_due || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setPaymentSale(row)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1.5 rounded-xl border border-emerald-200 shadow-2xs transition cursor-pointer"
+                  title="Record payment received for kept goods"
+                >
+                  <Plus size={13} /> Pay
+                </button>
+              ) : Number(row.amount_to_return || 0) > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setPaymentSale(row)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-xl border border-rose-200 shadow-2xs transition cursor-pointer"
+                  title="Customer overpaid: Refund due"
+                >
+                  <RotateCcw size={12} /> Refund Due
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPaymentSale(row)}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 bg-slate-50 hover:bg-slate-100 px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs transition cursor-pointer"
+                  title="View payment logs"
+                >
+                  <FileText size={13} /> Log
+                </button>
+              )
             )}
 
             {/* 6. Download PDF */}
@@ -1031,18 +1107,19 @@ export function SalesPage() {
               ) : null}
 
               {/* Line Items Table with Dedicated Stock Status Column */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <div className="bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 grid grid-cols-12 gap-2 items-center">
-                  <div className="col-span-3">PRODUCT / FINISHED GOOD</div>
-                  <div className="col-span-2 text-center">INVENTORY STOCK</div>
-                  <div className="col-span-2 text-right">QTY TO SELL</div>
-                  <div className="col-span-2 text-right">RATE / UNIT</div>
-                  <div className="col-span-1 text-right">DISC %</div>
-                  <div className="col-span-1 text-right">GST %</div>
-                  <div className="col-span-1 text-center">ACTION</div>
-                </div>
+              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[960px]">
+                    <div className="bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 grid grid-cols-12 gap-2 items-center">
+                      <div className="col-span-4">PRODUCT / FINISHED GOOD</div>
+                      <div className="col-span-2 text-center">INVENTORY STOCK</div>
+                      <div className="col-span-2 text-right">QTY TO SELL</div>
+                      <div className="col-span-2 text-right">RATE / UNIT</div>
+                      <div className="col-span-1 text-center font-bold text-blue-300">GST %</div>
+                      <div className="col-span-1 text-center">ACTION</div>
+                    </div>
 
-                <div className="divide-y divide-slate-100">
+                    <div className="divide-y divide-slate-100">
                   {lineItems.map((line, idx) => {
                     const selectedFg = goods.find((g) => g.id === line.finished_good_id);
                     const pkgList = selectedFg?.packaging_levels?.length ? selectedFg.packaging_levels : selectedFg?.packaging_configs;
@@ -1058,7 +1135,7 @@ export function SalesPage() {
                     return (
                       <div key={idx} className={`p-3 grid grid-cols-12 gap-2 items-start transition ${isExceeded ? 'bg-red-50/70 border-l-4 border-l-red-500' : 'bg-slate-50/50'}`}>
                         {/* Column 1: Product Select & Packaging Config Selector */}
-                        <div className="col-span-3 space-y-1.5">
+                        <div className="col-span-4 space-y-1.5">
                           <Select
                             value={line.finished_good_id}
                             onChange={(val) => updateLine(idx, 'finished_good_id', val)}
@@ -1178,19 +1255,14 @@ export function SalesPage() {
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-1 text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded text-[10px] font-medium" title="Catalog selling price configured in inventory">
-                                  Catalog: <strong className="text-slate-900">{formatCurrency(selectedFg.default_price || 0, workspace?.currency)}</strong>/{selectedFg.unit || 'unit'}
+                                  Catalog: <strong className="text-slate-900">{formatCurrency(selectedFg.default_price || 0, workspace?.currency)}</strong>/{selectedFg.unit || 'unit'} (Excl. GST) · <strong className="text-emerald-700">{formatCurrency((Number(selectedFg.default_price || 0) * (1 + (Number(selectedFg.tax_rate != null ? selectedFg.tax_rate : 18) / 100))), workspace?.currency)}</strong> (Incl. GST)
                                 </span>
                               )}
                             </div>
                           )}
                         </div>
 
-                        {/* Column 5: Discount % */}
-                        <div className="col-span-1">
-                          <input className={`${formInputCls} text-right`} inputMode="decimal" value={line.discount_percent} onChange={(e) => updateLine(idx, 'discount_percent', e.target.value)} />
-                        </div>
-
-                        {/* Column 6: GST % */}
+                        {/* Column 5: GST % */}
                         <div className="col-span-1">
                           <Select
                             value={line.tax_rate}
@@ -1205,7 +1277,7 @@ export function SalesPage() {
                           />
                         </div>
 
-                        {/* Column 7: Action */}
+                        {/* Column 6: Action */}
                         <div className="col-span-1 text-center pt-2">
                           <button type="button" onClick={() => removeLine(idx)} className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer">
                             <Trash2 size={16} />
@@ -1215,52 +1287,42 @@ export function SalesPage() {
                     );
                   })}
                 </div>
+              </div>
+            </div>
 
-                <div className="p-4 bg-slate-100/80 border-t border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <Button type="button" variant="secondary" icon={<Plus size={15} />} onClick={() => addLine()}>Add Another Product Line</Button>
-
-                  {/* GST Split & Rounding Calculation Box */}
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs text-xs space-y-1.5 w-full md:w-80">
-                    <div className="flex justify-between text-slate-600">
-                      <span>Taxable Subtotal:</span>
-                      <span className="font-semibold text-slate-900 font-mono">{formatCurrency(subtotal, workspace?.currency)}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>{isInterstate ? 'IGST Tax:' : 'CGST + SGST Tax:'}</span>
-                      <span className="font-semibold text-slate-900 font-mono">{formatCurrency(totalTax, workspace?.currency)}</span>
-                    </div>
-                    {discountRate > 0 && (
-                      <div className="flex justify-between text-emerald-700 font-medium pt-0.5">
-                        <span>Invoice Discount ({discountRate}%):</span>
-                        <span className="font-bold font-mono">-{formatCurrency(calculatedDiscountAmount, workspace?.currency)}</span>
-                      </div>
-                    )}
-                    {roundOffAmount !== 0 ? (
-                      <div className="flex justify-between text-slate-500 font-mono text-[11px]">
-                        <span>Round Off:</span>
-                        <span>{roundOffAmount > 0 ? `+${roundOffAmount.toFixed(2)}` : roundOffAmount.toFixed(2)}</span>
-                      </div>
-                    ) : null}
-                    <div className="flex justify-between items-center text-sm font-bold text-slate-900 pt-1.5 border-t border-slate-100">
-                      <span>Grand Total:</span>
-                      <div className="text-right">
-                        <span className="text-blue-700 font-mono">{formatCurrency(grandTotal, workspace?.currency)}</span>
-                        {discountRate > 0 && (
-                          <span className="ml-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-300">
-                            (Saved {formatCurrency(calculatedDiscountAmount, workspace?.currency)})
-                          </span>
-                        )}
-                      </div>
-                    </div>
+            <div className="p-3 bg-slate-100/70 border-t border-slate-200 flex justify-between items-center">
+              <Button type="button" variant="secondary" icon={<Plus size={15} />} onClick={() => addLine()}>Add Another Product Line</Button>
+              <div className="text-right text-xs font-semibold text-slate-700 space-y-1">
+                <div>Gross MRP: <span className="text-slate-900">{formatCurrency(grossSubtotal, workspace?.currency)}</span></div>
+                {discountRate > 0 && (
+                  <div className="text-emerald-700 font-medium flex items-center justify-end gap-1">
+                    <span>Discount ({discountRate}%):</span>
+                    <span className="font-bold font-mono">-{formatCurrency(calculatedDiscountAmount, workspace?.currency)}</span>
                   </div>
+                )}
+                <div>Taxable (Discounted MRP): <span className="text-slate-900">{formatCurrency(taxableSubtotal, workspace?.currency)}</span></div>
+                <div>GST Tax: <span className="text-slate-900">+{formatCurrency(totalTax, workspace?.currency)}</span></div>
+                {roundOffAmount !== 0 && (
+                  <div className="text-slate-500 font-mono text-[11px]">Round Off: {roundOffAmount > 0 ? `+${roundOffAmount.toFixed(2)}` : roundOffAmount.toFixed(2)}</div>
+                )}
+                <div className="text-sm font-bold text-blue-700 pt-0.5 border-t border-slate-200/80">
+                  <span>Overall Total: </span>
+                  <span className="font-mono">{formatCurrency(grandTotal, workspace?.currency)}</span>
+                  {discountRate > 0 && (
+                    <span className="ml-1.5 text-xs font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-300">
+                      (Saved {formatCurrency(calculatedDiscountAmount, workspace?.currency)})
+                    </span>
+                  )}
                 </div>
               </div>
+            </div>
+          </div>
 
               {/* Bottom Actions */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                 <div className="flex flex-col gap-1.5 w-full">
                   <div className="flex justify-between items-center text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                    <span>Invoice Discount (%)</span>
+                    <span>Discount (%)</span>
                     {discountRate > 0 && (
                       <span className="text-emerald-700 font-bold font-mono normal-case tracking-normal">
                         Saved: -{formatCurrency(calculatedDiscountAmount, workspace?.currency)}

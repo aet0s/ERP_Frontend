@@ -28,10 +28,10 @@ interface ContactPerson {
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
 const isValidPhone = (phone: string) => {
   const digits = String(phone).replace(/\D/g, '');
-  return digits.length >= 10 && digits.length <= 15;
+  return digits.length === 10;
 };
 const isValidGstin = (gstin: string) => /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(String(gstin).trim());
-const isValidPan = (pan: string) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/i.test(String(pan).trim());
+const isValidPan = (pan: string) => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(String(pan).trim().toUpperCase());
 const isValidIfsc = (ifsc: string) => /^[A-Z]{4}0[A-Z0-9]{6}$/i.test(String(ifsc).trim());
 const isValidPincode = (pincode: string) => /^[1-9][0-9]{5}$/.test(String(pincode).trim());
 const isValidPartyCode = (code: string) => /^[A-Za-z0-9_-]{3,25}$/.test(String(code).trim());
@@ -220,9 +220,9 @@ function PartyModal({
 
     // 3. Primary Phone
     if (!form.phone || !form.phone.trim()) {
-      newErrors.phone = 'Primary phone / WhatsApp number is required';
+      newErrors.phone = 'Primary mobile number is required (exactly 10 digits)';
     } else if (!isValidPhone(form.phone)) {
-      newErrors.phone = 'Enter a valid 10-15 digit phone number (e.g. +91 9876543210)';
+      newErrors.phone = 'Mobile number must accept exactly 10 digits only (e.g. 9876543210)';
     }
 
     // 4. Primary Email
@@ -267,8 +267,9 @@ function PartyModal({
 
     // 10. PAN (if provided)
     if (form.pan && form.pan.trim()) {
-      if (!isValidPan(form.pan)) {
-        newErrors.pan = 'Invalid PAN format (e.g. ABCDE1234F - 5 letters, 4 numbers, 1 letter)';
+      const cleanPan = form.pan.trim().toUpperCase();
+      if (cleanPan.length !== 10 || !isValidPan(cleanPan)) {
+        newErrors.pan = 'PAN must be exactly 10 characters in valid format (e.g. ABCDE1234F - 5 letters, 4 numbers, 1 letter)';
       }
     }
 
@@ -304,7 +305,7 @@ function PartyModal({
         newErrors[`contact_${c.local_id}_name`] = `Contact #${idx + 1} name is required`;
       }
       if (c.phone && c.phone.trim() && !isValidPhone(c.phone)) {
-        newErrors[`contact_${c.local_id}_phone`] = 'Valid 10-15 digit phone required';
+        newErrors[`contact_${c.local_id}_phone`] = 'Mobile number must accept exactly 10 digits only';
       }
       if (c.email && c.email.trim() && !isValidEmail(c.email)) {
         newErrors[`contact_${c.local_id}_email`] = 'Valid email address required';
@@ -438,12 +439,13 @@ function PartyModal({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Field label="Primary Phone / WhatsApp" error={errors.phone} required>
+          <Field label="Primary Mobile Number" error={errors.phone} required>
             <input
               className={inputCls(!!errors.phone)}
-              placeholder="+91 9876543210 (10-15 digits)"
+              placeholder="10-digit mobile number (e.g. 9876543210)"
+              maxLength={10}
               value={form.phone}
-              onChange={(e) => updateField('phone', e.target.value)}
+              onChange={(e) => updateField('phone', e.target.value.replace(/\D/g, '').slice(0, 10))}
             />
           </Field>
           <Field label="Primary Email Address" error={errors.email} required>
@@ -535,10 +537,10 @@ function PartyModal({
               placeholder="10-char PAN (e.g. ABCDE1234F)"
               maxLength={10}
               value={form.pan}
-              onChange={(e) => updateField('pan', e.target.value.toUpperCase())}
+              onChange={(e) => updateField('pan', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))}
               onBlur={() => checkTaxUniqueness('', form.pan)}
             />
-            <p className="text-[11px] text-slate-400 mt-0.5">10-digit PAN (5 letters, 4 numbers, 1 letter). Must be unique across ERP.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">10-character PAN (5 letters, 4 numbers, 1 letter). Must be unique across ERP.</p>
           </Field>
         </div>
 

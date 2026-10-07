@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { DatePicker } from '../components/ui/DatePicker';
 import type { FormEvent } from 'react';
 import {
   AlertTriangle,
   ArrowLeftRight,
   Boxes,
-  Check,
   Eye,
   PackageCheck,
   SlidersHorizontal,
@@ -15,7 +13,7 @@ import {
 import { api } from '../lib/api';
 import { useToast, useWorkspace } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
-import { formatCurrency, formatNumber, dateIso, readList, csvDownload } from '../lib/utils';
+import { formatCurrency, formatNumber, csvDownload } from '../lib/utils';
 import type { AnyRow, TableColumn } from '../lib/types';
 import { useOptions } from '../hooks/useOptions';
 import { DataTable } from '../components/DataTable';
@@ -48,40 +46,156 @@ const INVENTORY_EXPORT_COLUMNS: ExportColumnOption[] = [
 
 function StockTransferModal({ row, locations, onClose, onSaved }: { row?: any; locations: any[]; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
-  const [inventory, setInventory] = useState<any[]>([]);
-  const defaultFromLoc = locations.find((l) => l.is_default) || locations[0];
-  const defaultToLoc = locations.find((l) => !l.is_default) || locations[1] || defaultFromLoc;
+  const [items, setItems] = useState<any[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  const initialItemType = row?.item_type || 'raw_material';
+  const initialItemId = row?.item_id || '';
+  const initialFromLoc = row?.location_id || '';
 
   const [form, setForm] = useState({
-    item_key: row ? `${row.item_type}:${row.item_id}` : '',
-    from_location_id: defaultFromLoc?.id || '',
-    to_location_id: defaultToLoc?.id || '',
+    from_location_id: initialFromLoc,
+    to_location_id: '',
+    item_type: initialItemType,
+    item_id: initialItemId,
+    packaging_level_id: row?.packaging_level_id || '',
     quantity: '',
     notes: ''
   });
 
+  // Fetch available items whenever item_type or from_location_id changes
   useEffect(() => {
-    if (!row) {
-      api.get('/api/inventory', { params: { table: 1, page_size: 100 } })
-        .then((res) => setInventory(readList<any>(res.data).items));
+    if (!form.item_type || !form.from_location_id) {
+      setItems([]);
+      return;
     }
-  }, [row]);
+    setLoadingItems(true);
+    api.get('/api/stock-transfers/available-items', {
+      params: {
+        item_type: form.item_type,
+        location_id: form.from_location_id
+      }
+    })
+      .then((res) => {
+        const fetchedItems = res.data || [];
+        setItems(fetchedItems);
+        // If an item is selected without a pinned row, verify it's still in stock in this location
+        if (form.item_id && !row?.item_id) {
+          const found = fetchedItems.find((it: any) => it.id === form.item_id);
+          if (!found || Number(found.current_stock || 0) <= 0) {
+            setForm((prev) => ({ ...prev, item_id: '', packaging_level_id: '', quantity: '' }));
+          } else if (found.packaging_level_id && !form.packaging_level_id) {
+            setForm((prev) => ({ ...prev, packaging_level_id: found.packaging_level_id }));
+          }
+        } else if (form.item_id && row?.item_id) {
+          const found = fetchedItems.find((it: any) => it.id === form.item_id);
+          if (found?.packaging_level_id && !form.packaging_level_id) {
+            setForm((prev) => ({ ...prev, packaging_level_id: found.packaging_level_id }));
+          }
+        }
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoadingItems(false));
+  }, [form.item_type, form.from_location_id]);
+
+  const isSameLocation = Boolean(
+    form.from_location_id &&
+    form.to_location_id &&
+    form.from_location_id === form.to_location_id
+  );
+
+  const selectedItem = items.find((i) => i.id === form.item_id);
+  const pkgLevels = selectedItem?.packaging_levels || [];
+  const activePkgLevel = pkgLevels.length > 0
+    ? (pkgLevels.find((l: any) => l.id === form.packaging_level_id) || pkgLevels.find((l: any) => l.packaged_stock > 0) || pkgLevels[0])
+    : null;
+
+  const currentUnit = activePkgLevel
+    ? (activePkgLevel.package_unit || activePkgLevel.name || 'Packets')
+    : (selectedItem?.unit || row?.unit || 'units');
+
+  const availableStock = activePkgLevel
+    ? Number(activePkgLevel.packaged_stock || 0)
+    : Number(selectedItem?.current_stock ?? row?.current_stock ?? 0);
+
+  const qtyNum = Number(form.quantity || 0);
+  const isQtyExceeded = Boolean(selectedItem && qtyNum > availableStock);
+
+  const handleFromLocationChange = (val: string) => {
+    setForm((prev) => ({
+      ...prev,
+      from_location_id: val,
+      // If destination was same as newly selected source, clear it
+      to_location_id: prev.to_location_id === val ? '' : prev.to_location_id,
+      item_id: row?.item_id ? row.item_id : '',
+      packaging_level_id: '',
+      quantity: ''
+    }));
+  };
+
+  const handleToLocationChange = (val: string) => {
+    setForm((prev) => ({
+      ...prev,
+      to_location_id: val
+    }));
+  };
+
+  const handleItemTypeChange = (val: string) => {
+    setForm((prev) => ({
+      ...prev,
+      item_type: val,
+      item_id: '',
+      packaging_level_id: '',
+      quantity: ''
+    }));
+  };
+
+  const handleItemChange = (val: string) => {
+    const it = items.find((i) => i.id === val);
+    const defaultPkgId = it?.packaging_level_id || (it?.packaging_levels?.[0]?.id) || '';
+    setForm((prev) => ({
+      ...prev,
+      item_id: val,
+      packaging_level_id: defaultPkgId,
+      quantity: ''
+    }));
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!form.from_location_id || !form.to_location_id) return toast('Select both source and destination locations', 'error');
-    if (form.from_location_id === form.to_location_id) return toast('Source and destination locations must be different', 'error');
-
-    const [item_type, item_id] = (row ? `${row.item_type}:${row.item_id}` : form.item_key).split(':');
-    if (!item_type || !item_id) return toast('Select an item to transfer', 'error');
+    if (!form.from_location_id || !form.to_location_id) {
+      toast('Please select both source and destination locations', 'error');
+      return;
+    }
+    if (form.from_location_id === form.to_location_id) {
+      toast('Transfer is not possible: Source and destination locations cannot be the same', 'error');
+      return;
+    }
+    if (!form.item_id || !selectedItem) {
+      toast('Please select an in-stock item to transfer', 'error');
+      return;
+    }
+    if (availableStock <= 0) {
+      toast(`Transfer is not possible: Item has 0 ${currentUnit} in stock at the selected source location`, 'error');
+      return;
+    }
+    if (!form.quantity || qtyNum <= 0) {
+      toast('Please enter a valid transfer quantity', 'error');
+      return;
+    }
+    if (isQtyExceeded) {
+      toast(`Transfer is not possible: Quantity exceeds available stock (${formatNumber(availableStock)} ${currentUnit})`, 'error');
+      return;
+    }
 
     try {
       await api.post('/api/stock-transfers', {
-        item_type,
-        item_id,
+        item_type: form.item_type,
+        item_id: form.item_id,
         from_location_id: form.from_location_id,
         to_location_id: form.to_location_id,
         quantity: Number(form.quantity),
+        packaging_level_id: activePkgLevel ? activePkgLevel.id : undefined,
         notes: form.notes
       });
       toast('Stock transfer completed successfully');
@@ -91,131 +205,220 @@ function StockTransferModal({ row, locations, onClose, onSaved }: { row?: any; l
     }
   };
 
-  const inputCls = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition";
+  const inputCls = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed";
+
+  // Destination options: filter out the selected From location so user cannot select the same location
+  const toLocationOptions = [
+    { value: '', label: form.from_location_id ? 'Select destination location' : 'Select From location first' },
+    ...locations
+      .filter((l) => l.id !== form.from_location_id)
+      .map((l) => ({ value: l.id, label: `${l.name} ${l.is_default ? '(Default)' : ''}` }))
+  ];
 
   return (
-    <Modal title={`Stock Transfer ${row ? `- ${row.name}` : ''}`} onClose={onClose}>
+    <Modal title={`Stock Transfer ${row?.name ? `- ${row.name}` : ''}`} onClose={onClose}>
       <form className="space-y-4" onSubmit={submit}>
-        {!row && (
-          <Field label="Item to Transfer">
+        {/* Same Location Error Warning */}
+        {isSameLocation && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-semibold flex items-center gap-2">
+            <AlertTriangle size={16} className="text-red-600 shrink-0" />
+            <span>Transfer is not possible: Source and destination locations cannot be the same.</span>
+          </div>
+        )}
+
+        {/* Step 1 & Step 2: From Location & To Location */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="1. From Location (Source)">
             <Select
-              value={form.item_key}
-              onChange={(val) => setForm({ ...form, item_key: val })}
+              value={form.from_location_id}
+              onChange={handleFromLocationChange}
               options={[
-                { value: '', label: 'Select item' },
-                ...inventory.map((item) => ({
-                  value: `${item.item_type}:${item.item_id}`,
-                  label: `${item.name} (${item.item_type.replace('_', ' ')})`
-                }))
+                { value: '', label: 'Select source location' },
+                ...locations.map((l) => ({ value: l.id, label: `${l.name} ${l.is_default ? '(Default)' : ''}` }))
               ]}
             />
           </Field>
-        )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="From Location (Source)">
-            <Select
-              value={form.from_location_id}
-              onChange={(val) => setForm({ ...form, from_location_id: val })}
-              options={locations.map((l) => ({ value: l.id, label: `${l.name} ${l.is_default ? '(Default)' : ''}` }))}
-            />
-          </Field>
-
-          <Field label="To Location (Destination)">
+          <Field label="2. To Location (Destination)">
             <Select
               value={form.to_location_id}
-              onChange={(val) => setForm({ ...form, to_location_id: val })}
-              options={locations.map((l) => ({ value: l.id, label: `${l.name} ${l.is_default ? '(Default)' : ''}` }))}
+              disabled={!form.from_location_id}
+              onChange={handleToLocationChange}
+              options={toLocationOptions}
             />
           </Field>
         </div>
 
-        <Field label="Transfer Quantity">
-          <input className={inputCls} required inputMode="decimal" placeholder="e.g. 50" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} />
-        </Field>
+        {/* Step 3 & Step 4: Item Category & Select Item */}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="3. Item Category">
+            <Select
+              value={form.item_type}
+              disabled={!form.from_location_id || !form.to_location_id}
+              onChange={handleItemTypeChange}
+              options={[
+                { value: 'raw_material', label: 'Raw Material' },
+                { value: 'finished_good', label: 'Finished Good' },
+                { value: 'wip', label: 'WIP Item' }
+              ]}
+            />
+          </Field>
+
+          <Field label="4. Select Item (In Stock Only)">
+            <Select
+              value={form.item_id}
+              disabled={!form.from_location_id || !form.to_location_id || loadingItems}
+              onChange={handleItemChange}
+              placeholder={
+                !form.from_location_id
+                  ? 'Select source location first'
+                  : !form.to_location_id
+                  ? 'Select destination first'
+                  : loadingItems
+                  ? 'Loading items...'
+                  : 'Select in-stock item'
+              }
+              options={[
+                {
+                  value: '',
+                  label: !form.from_location_id
+                    ? 'Select source location first'
+                    : loadingItems
+                    ? 'Loading items...'
+                    : 'Select in-stock item'
+                },
+                ...items.map((i) => {
+                  const isPkg = i.item_type === 'finished_good' && i.packaging_levels && i.packaging_levels.length > 0;
+                  const stock = Number(i.current_stock || 0);
+                  const inStock = stock > 0;
+                  let stockLabel = '';
+                  if (isPkg) {
+                    const pkgUnit = i.package_unit || i.package_name || 'Packets';
+                    stockLabel = inStock
+                      ? `In Stock: ${formatNumber(stock)} ${pkgUnit} (${formatNumber(i.base_stock || 0)} ${i.base_unit || 'units'})`
+                      : `Out of Stock (0 ${pkgUnit})`;
+                  } else {
+                    stockLabel = inStock
+                      ? `In Stock: ${formatNumber(stock)} ${i.unit || 'units'}`
+                      : `Out of Stock (0 ${i.unit || 'units'})`;
+                  }
+                  return {
+                    value: i.id,
+                    disabled: !inStock,
+                    label: `${i.name}${i.code ? ` (${i.code})` : ''} — ${stockLabel}`
+                  };
+                })
+              ]}
+            />
+          </Field>
+        </div>
+
+        {/* Optional Packaging Format selection if product has multiple packaging formats */}
+        {selectedItem && pkgLevels.length > 1 && (
+          <Field label="Packaging Format">
+            <Select
+              value={activePkgLevel?.id || ''}
+              onChange={(val) => {
+                setForm((prev) => ({ ...prev, packaging_level_id: val, quantity: '' }));
+              }}
+              options={pkgLevels.map((lvl: any) => ({
+                value: lvl.id,
+                label: `${lvl.name} (${lvl.package_unit}) — In Stock: ${formatNumber(lvl.packaged_stock)} ${lvl.package_unit} [1 ${lvl.package_unit} = ${lvl.base_quantity_equivalent} ${selectedItem.base_unit || 'units'}]`
+              }))}
+            />
+          </Field>
+        )}
+
+        {/* Stock Badge for selected item */}
+        {form.from_location_id && (selectedItem || row?.item_id) && (
+          <div className={`p-3 rounded-xl border text-xs flex items-center justify-between ${
+            availableStock > 0
+              ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+              : 'bg-red-50 border-red-200 text-red-800 font-semibold'
+          }`}>
+            <div className="flex items-center gap-2">
+              <PackageCheck size={16} className={availableStock > 0 ? 'text-emerald-600' : 'text-red-500'} />
+              <div>
+                <span className="font-semibold block">Available in Source Location:</span>
+                {activePkgLevel && (
+                  <span className="text-[11px] text-emerald-700 font-medium">
+                    Package Format: <strong>{activePkgLevel.name}</strong> (1 {activePkgLevel.package_unit} = {activePkgLevel.base_quantity_equivalent} {selectedItem?.base_unit || row?.unit || 'units'})
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="font-bold font-mono text-sm block">
+                {availableStock > 0
+                  ? `${formatNumber(availableStock)} ${currentUnit}`
+                  : `0 ${currentUnit} (Transfer is not possible)`}
+              </span>
+              {activePkgLevel && availableStock > 0 && (
+                <span className="text-[10px] text-slate-500 font-mono">
+                  Total: {formatNumber(availableStock * (Number(activePkgLevel.base_quantity_equivalent) || 1))} {selectedItem?.base_unit || row?.unit || 'units'}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 5: Quantity to Transfer */}
+        <div>
+          <Field label={`5. Quantity to Transfer (${currentUnit})`}>
+            <input
+              className={inputCls}
+              required
+              type="number"
+              step="any"
+              min="0.0001"
+              max={availableStock > 0 ? availableStock : undefined}
+              disabled={!form.item_id || availableStock <= 0}
+              placeholder={!form.item_id ? 'Select an in-stock item first' : `Enter number of ${currentUnit} (Max: ${formatNumber(availableStock)})`}
+              value={form.quantity}
+              onChange={(event) => setForm({ ...form, quantity: event.target.value })}
+            />
+          </Field>
+          {isQtyExceeded && (
+            <div className="text-xs text-red-600 font-semibold flex items-center gap-1.5 mt-1.5">
+              <AlertTriangle size={14} className="shrink-0" />
+              <span>Transfer is not possible: Entered quantity exceeds available stock ({formatNumber(availableStock)} {currentUnit}).</span>
+            </div>
+          )}
+          {qtyNum > 0 && activePkgLevel && !isQtyExceeded && (
+            <div className="text-xs text-emerald-700 bg-emerald-50/60 border border-emerald-200/60 rounded-lg p-2 flex items-center justify-between mt-1.5">
+              <span>Transferring <strong>{formatNumber(qtyNum)} {currentUnit}</strong></span>
+              <span className="font-mono font-medium">= {formatNumber(qtyNum * (Number(activePkgLevel.base_quantity_equivalent) || 1))} {selectedItem?.base_unit || row?.unit || 'units'}</span>
+            </div>
+          )}
+        </div>
 
         <Field label="Notes / Reference">
-          <input className={inputCls} placeholder="Optional transfer notes" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
+          <textarea
+            className={`${inputCls} h-20 resize-y`}
+            placeholder="Optional transfer notes"
+            value={form.notes}
+            onChange={(event) => setForm({ ...form, notes: event.target.value })}
+          />
         </Field>
 
         <div className="flex justify-end pt-3 border-t border-slate-100">
-          <Button type="submit" icon={<ArrowLeftRight size={16} />}>Execute Transfer</Button>
+          <Button
+            type="submit"
+            icon={<ArrowLeftRight size={16} />}
+            disabled={
+              !form.from_location_id ||
+              !form.to_location_id ||
+              isSameLocation ||
+              !form.item_id ||
+              availableStock <= 0 ||
+              !form.quantity ||
+              qtyNum <= 0 ||
+              isQtyExceeded
+            }
+          >
+            Execute Transfer
+          </Button>
         </div>
-      </form>
-    </Modal>
-  );
-}
-
-function AdjustmentModal({ prefilledRow, locations, onClose, onSaved }: { prefilledRow?: any; locations: any[]; onClose: () => void; onSaved: () => void }) {
-  const toast = useToast();
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    item_key: prefilledRow ? `${prefilledRow.item_type}:${prefilledRow.item_id}` : '',
-    quantity: '',
-    location_id: locations.find((l) => l.is_default)?.id || locations[0]?.id || '',
-    date: dateIso(),
-    reason: ''
-  });
-
-  useEffect(() => {
-    if (!prefilledRow) {
-      api.get('/api/inventory', { params: { table: 1, page_size: 100 } })
-        .then((res) => setInventory(readList<any>(res.data).items));
-    }
-  }, [prefilledRow]);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    const [item_type, item_id] = (prefilledRow ? `${prefilledRow.item_type}:${prefilledRow.item_id}` : form.item_key).split(':');
-    try {
-      await api.post('/api/inventory/adjustments', {
-        item_type,
-        item_id,
-        quantity: Number(form.quantity),
-        location_id: form.location_id,
-        date: form.date,
-        reason: form.reason
-      });
-      toast('Stock adjustment saved');
-      onSaved();
-    } catch (error: any) {
-      toast(error.response?.data?.error || 'Unable to save adjustment', 'error');
-    }
-  };
-
-  const inputCls = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition";
-
-  return (
-    <Modal title={`Stock Adjustment ${prefilledRow ? `- ${prefilledRow.name}` : ''}`} onClose={onClose}>
-      <form className="space-y-4" onSubmit={submit}>
-        {!prefilledRow && (
-          <Field label="Item">
-            <Select
-              value={form.item_key}
-              onChange={(val) => setForm({ ...form, item_key: val })}
-              options={[
-                { value: '', label: 'Select item' },
-                ...inventory.map((item) => ({
-                  value: `${item.item_type}:${item.item_id}`,
-                  label: `${item.name} (${item.item_type.replace('_', ' ')})`
-                }))
-              ]}
-            />
-          </Field>
-        )}
-        <Field label="Location">
-          <Select
-            value={form.location_id}
-            onChange={(val) => setForm({ ...form, location_id: val })}
-            options={locations.map((l) => ({ value: l.id, label: `${l.name} ${l.is_default ? '(Default)' : ''}` }))}
-          />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Adjustment Qty"><input className={inputCls} required inputMode="decimal" placeholder="+5 or -2" value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></Field>
-          <Field label="Date"><DatePicker value={form.date} onChange={(val) => setForm({ ...form, date: val })} /></Field>
-        </div>
-        <Field label="Reason"><textarea className={`${inputCls} h-20 resize-y`} required value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} /></Field>
-        <div className="flex justify-end pt-3 border-t border-slate-100"><Button type="submit" icon={<Check size={16} />}>Save Adjustment</Button></div>
       </form>
     </Modal>
   );
@@ -239,7 +442,6 @@ export function InventoryPage() {
   const locations = useOptions('/api/locations', refresh) as any[];
 
   const [detailItem, setDetailItem] = useState<AnyRow | null>(null);
-  const [adjust, setAdjust] = useState<AnyRow | null>(null);
   const [transfer, setTransfer] = useState<AnyRow | null>(null);
   const [exportModalData, setExportModalData] = useState<{ total: number; getExportData: () => Promise<any[]> } | null>(null);
 
@@ -301,6 +503,15 @@ export function InventoryPage() {
     }
     setSearchParams(next);
     setFilters((prev) => ({ ...prev, item_type: tabId }));
+  };
+
+  const handleInitiateTransfer = (itemRow: any) => {
+    const stock = Number(itemRow?.current_stock || 0);
+    if (stock <= 0) {
+      toast('No Stock is available for transfer', 'error');
+      return;
+    }
+    setTransfer(itemRow);
   };
 
   const columns: TableColumn<AnyRow>[] = [
@@ -496,21 +707,15 @@ export function InventoryPage() {
           {canCreate && (
             <button
               type="button"
-              title="Stock Transfer"
-              onClick={() => setTransfer(row)}
-              className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+              title={Number(row.current_stock || 0) <= 0 ? "No Stock available for transfer" : "Stock Transfer"}
+              onClick={() => handleInitiateTransfer(row)}
+              className={`p-1.5 rounded-lg transition cursor-pointer ${
+                Number(row.current_stock || 0) <= 0
+                  ? 'text-slate-400 hover:text-red-600 hover:bg-red-50'
+                  : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50'
+              }`}
             >
               <ArrowLeftRight size={15} />
-            </button>
-          )}
-          {canCreate && (
-            <button
-              type="button"
-              title="Adjust Stock"
-              onClick={() => setAdjust(row)}
-              className="p-1.5 text-slate-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition cursor-pointer"
-            >
-              <SlidersHorizontal size={15} />
             </button>
           )}
         </div>
@@ -535,14 +740,9 @@ export function InventoryPage() {
         subtitle="Live real-time asset valuation, stock balances across packaging formats, and warehouse movement audit trails."
         action={
           canCreate ? (
-            <div className="flex items-center gap-2">
-              <Button variant="secondary" icon={<ArrowLeftRight size={16} />} onClick={() => setTransfer({})}>
-                Stock Transfer
-              </Button>
-              <Button icon={<SlidersHorizontal size={16} />} onClick={() => setAdjust({})}>
-                Stock Adjustment
-              </Button>
-            </div>
+            <Button variant="secondary" icon={<ArrowLeftRight size={16} />} onClick={() => setTransfer({})}>
+              Stock Transfer
+            </Button>
           ) : undefined
         }
       />
@@ -567,7 +767,7 @@ export function InventoryPage() {
             <span>Finished Goods Value</span>
             <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600"><PackageCheck size={15} /></span>
           </div>
-          <div className="text-2xl font-black text-emerald-950 font-mono tracking-tight">
+          <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono tracking-tight">
             {formatCurrency(summaryData.finished_goods_value, workspace?.currency)}
           </div>
           <p className="text-[11px] text-slate-500">
@@ -580,7 +780,7 @@ export function InventoryPage() {
             <span>Raw Materials Value</span>
             <span className="p-1.5 rounded-lg bg-amber-50 text-amber-600"><Boxes size={15} /></span>
           </div>
-          <div className="text-2xl font-black text-amber-950 font-mono tracking-tight">
+          <div className="text-2xl font-black text-amber-700 dark:text-amber-400 font-mono tracking-tight">
             {formatCurrency(summaryData.raw_material_value, workspace?.currency)}
           </div>
           <p className="text-[11px] text-slate-500">
@@ -707,27 +907,15 @@ export function InventoryPage() {
         <InventoryDetailDrawer
           item={detailItem as any}
           onClose={() => setDetailItem(null)}
-          onAdjust={canCreate ? (item) => {
-            setDetailItem(null);
-            setAdjust(item);
-          } : undefined}
           onTransfer={canCreate ? (item) => {
+            const stock = Number(item?.current_stock || 0);
+            if (stock <= 0) {
+              toast('No Stock is available for transfer', 'error');
+              return;
+            }
             setDetailItem(null);
             setTransfer(item);
           } : undefined}
-        />
-      )}
-
-      {/* Adjust Modal */}
-      {adjust && (
-        <AdjustmentModal
-          prefilledRow={adjust.item_id ? adjust : undefined}
-          locations={locations}
-          onClose={() => setAdjust(null)}
-          onSaved={() => {
-            setRefresh((value) => value + 1);
-            setAdjust(null);
-          }}
         />
       )}
 

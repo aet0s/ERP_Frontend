@@ -153,6 +153,14 @@
     color: #93c5fd !important;
   }
 
+  html.dark .text-emerald-950 {
+    color: #34d399 !important;
+  }
+
+  html.dark .text-amber-950 {
+    color: #fbbf24 !important;
+  }
+
   /* 11. Minimalist Custom Sidebar Scrollbar */
   .custom-sidebar-scroll::-webkit-scrollbar {
     width: 4px;

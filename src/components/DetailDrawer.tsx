@@ -19,7 +19,26 @@ export function DetailDrawer({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get(endpoint).then((res) => setDetail(res.data)).finally(() => setLoading(false));
+    api.get(endpoint)
+      .then((res) => {
+        const data = res.data;
+        if (data && typeof data === 'object') {
+          if (data.debit_note && typeof data.debit_note === 'object') {
+            setDetail({ ...data.debit_note, ...data });
+          } else if (data.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+            setDetail({ ...data.data, ...data });
+          } else {
+            setDetail(data);
+          }
+        } else {
+          setDetail(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load record details:', err);
+        setDetail(null);
+      })
+      .finally(() => setLoading(false));
   }, [endpoint]);
 
   return (
@@ -33,33 +52,129 @@ export function DetailDrawer({
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  {detail.procurement_number ? 'Procurement Order' : detail.invoice_number ? 'Sales Invoice' : 'Document Details'}
+                  {detail.debit_note_number
+                    ? 'Debit Note (Vendor Return)'
+                    : detail.payment_number || detail.related_type
+                    ? 'Payment History Record'
+                    : detail.location_code || (detail.name && detail.is_default !== undefined)
+                    ? 'Warehouse Location Details'
+                    : detail.procurement_number
+                    ? 'Procurement Order'
+                    : detail.invoice_number
+                    ? 'Sales Invoice'
+                    : 'Document Details'}
                 </span>
                 <h3 className="text-base font-bold text-white font-mono">
-                  {detail.procurement_number || detail.invoice_number || detail.po_number || detail.id}
+                  {detail.debit_note_number ||
+                    detail.payment_number ||
+                    detail.location_code ||
+                    detail.procurement_number ||
+                    detail.invoice_number ||
+                    detail.po_number ||
+                    detail.name ||
+                    detail.id}
                 </h3>
               </div>
               {detail.status && <StatusBadge status={detail.status} />}
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-800 pt-3">
-              <div>
-                <span className="text-slate-400 block text-[11px]">Party / Vendor:</span>
-                <strong className="text-white font-medium">{detail.vendor_name || detail.customer_name || 'Walk-in / Direct'}</strong>
+            {/* If Location Details */}
+            {detail.location_code || (detail.name && detail.is_default !== undefined) ? (
+              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-800 pt-3">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Location Name:</span>
+                  <strong className="text-white font-medium">{detail.name || 'Warehouse'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Location Code:</span>
+                  <strong className="text-white font-mono">{detail.location_code || '—'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Facility Type:</span>
+                  <strong className="text-white font-medium">{detail.is_default ? 'Primary (Default Warehouse)' : 'Secondary Facility'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">City / State:</span>
+                  <strong className="text-white font-medium">{[detail.city, detail.state].filter(Boolean).join(', ') || '—'}</strong>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-400 block text-[11px]">Full Address:</span>
+                  <strong className="text-white font-medium">{detail.address || '—'}</strong>
+                </div>
+                {detail.notes && (
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[11px]">Operating Notes:</span>
+                    <span className="text-slate-200">{detail.notes}</span>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Location:</span>
-                <strong className="text-white font-medium">{detail.location_name || 'Main Location'}</strong>
+            ) : detail.payment_number || detail.related_type ? (
+              /* If Payment Details */
+              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-800 pt-3">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Party / Contact:</span>
+                  <strong className="text-white font-medium">{detail.party_name || detail.vendor_name || detail.customer_name || 'Walk-in'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Transaction Type:</span>
+                  <strong className="text-white capitalize">{detail.related_type || detail.type || 'Payment'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Payment Date:</span>
+                  <strong className="text-white font-medium">{formatDate(detail.date || detail.created_at)}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Related Reference:</span>
+                  <strong className="text-white font-mono">{detail.related_reference || detail.related_id || 'Direct'}</strong>
+                </div>
+                {detail.notes && (
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[11px]">Payment Reference / Notes:</span>
+                    <span className="text-slate-200">{detail.notes}</span>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Date:</span>
-                <strong className="text-white font-medium">{formatDate(detail.date || detail.created_at)}</strong>
+            ) : (
+              /* Standard Procurement / Invoice / Debit Note details */
+              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-800 pt-3">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Party / Vendor:</span>
+                  <strong className="text-white font-medium">{detail.vendor_name || detail.customer_name || 'Walk-in / Direct'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Location:</span>
+                  <strong className="text-white font-medium">{detail.location_name || 'Main Location'}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Date:</span>
+                  <strong className="text-white font-medium">{formatDate(detail.date || detail.created_at)}</strong>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">
+                    {detail.debit_note_number ? 'Returned Items:' : 'Total Items:'}
+                  </span>
+                  <strong className="text-white font-medium">{detail.items?.length || detail.item_count || 1} item(s)</strong>
+                </div>
+                {detail.debit_note_number && detail.reason && (
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[11px]">Debit Reason:</span>
+                    <strong className="text-amber-400 font-medium">{detail.reason}</strong>
+                  </div>
+                )}
+                {detail.debit_note_number && detail.procurement_number && (
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[11px]">Linked Procurement Ref:</span>
+                    <strong className="text-blue-400 font-mono">{detail.procurement_number}</strong>
+                  </div>
+                )}
+                {detail.debit_note_number && detail.notes && (
+                  <div className="col-span-2">
+                    <span className="text-slate-400 block text-[11px]">Notes:</span>
+                    <span className="text-slate-300">{detail.notes}</span>
+                  </div>
+                )}
               </div>
-              <div>
-                <span className="text-slate-400 block text-[11px]">Total Items:</span>
-                <strong className="text-white font-medium">{detail.items?.length || detail.item_count || 1} item(s)</strong>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Vendor Denial Reason / Vendor Notes Alert Box */}
@@ -131,19 +246,35 @@ export function DetailDrawer({
                 {detail.items.map((item: any, idx: number) => (
                   <div key={item.id || idx} className="p-2.5 grid grid-cols-12 gap-2 items-center text-xs">
                     <div className="col-span-4 font-semibold text-slate-800 truncate">
-                      {item.item_name || item.name || 'Material Item'}
+                      <div>{item.item_name || item.name || 'Material Item'}</div>
+                      {item.packaging_summary && (
+                        <span className="text-[10px] text-slate-400 block font-normal">
+                          {item.packaging_summary}
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-2 text-right font-medium text-slate-700">
                       {formatNumber(item.quantity)} {item.unit || ''}
                     </div>
                     <div className="col-span-3 text-right text-slate-600">
-                      {formatCurrency(item.rate_per_unit, workspace?.currency)}
+                      <div>{formatCurrency(item.rate_per_unit, workspace?.currency)}</div>
+                      {Number(item.selling_price || 0) > 0 && Number(item.unit_cost || 0) > 0 && Math.abs(Number(item.selling_price) - Number(item.rate_per_unit)) > 0.01 && (
+                        <span className="text-[10px] text-slate-400 block font-mono" title={`Selling price: ${formatCurrency(item.selling_price, workspace?.currency)}`}>
+                          Sell: {formatCurrency(item.selling_price, workspace?.currency)}
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-3 text-right font-bold text-slate-900">
                       {formatCurrency(item.line_total || (item.quantity * item.rate_per_unit), workspace?.currency)}
                     </div>
                   </div>
                 ))}
+                {detail.total_valuation != null && Number(detail.total_valuation) > 0 && (
+                  <div className="bg-slate-50 px-3 py-2 flex justify-between items-center text-xs border-t border-slate-200">
+                    <span className="font-semibold text-slate-600">Total Location Valuation:</span>
+                    <span className="font-bold font-mono text-slate-900">{formatCurrency(detail.total_valuation, workspace?.currency)}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

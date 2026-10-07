@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { 
   Building2, Phone, Mail, MapPin, CreditCard, Truck, 
-  FileText, CheckCircle2, Clock, DollarSign, AlertCircle, Package, PackageCheck, Copy
+  FileText, CheckCircle2, Clock, DollarSign, AlertCircle, Package, PackageCheck, Copy, RotateCcw
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCurrency, formatDate, formatNumber } from '../lib/utils';
@@ -130,7 +130,11 @@ export function ProcurementDetailDrawer({
               </div>
               <div className="flex flex-col items-end gap-1">
                 {proc.status && <StatusBadge status={proc.status} />}
-                {Number(proc.amount_due || 0) <= 0 ? (
+                {Number(proc.amount_to_return || 0) > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-300 bg-rose-950/70 px-2.5 py-0.5 rounded-full border border-rose-500/40">
+                    <RotateCcw className="w-3 h-3 text-rose-400" /> Refund Due
+                  </span>
+                ) : Number(proc.amount_due || 0) <= 0 ? (
                   <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
                     <CheckCircle2 className="w-3 h-3" /> Fully Paid
                   </span>
@@ -255,15 +259,51 @@ export function ProcurementDetailDrawer({
               )}
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            {Number(proc.amount_to_return || 0) > 0 && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <RotateCcw className="w-4 h-4 text-rose-600 shrink-0" />
+                  <div>
+                    <span className="font-bold text-rose-900 block">
+                      Vendor Refund Due: {formatCurrency(proc.amount_to_return, currency)}
+                    </span>
+                    <span className="text-[11px] text-rose-600">
+                      Returned goods exceed unpaid balance. Amount to be refunded by vendor.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className={`grid ${Number(proc.returned_amount || 0) > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-2`}>
               <div className="p-3 bg-white border border-slate-200 rounded-xl">
                 <span className="block text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                  Total Bill
+                  Original Bill
                 </span>
                 <span className="text-sm font-bold text-slate-900 block mt-0.5">
                   {formatCurrency(proc.total_amount, currency)}
                 </span>
               </div>
+              {Number(proc.returned_amount || 0) > 0 && (
+                <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl">
+                  <span className="block text-[10px] uppercase font-bold text-purple-700 tracking-wider">
+                    Returned Material
+                  </span>
+                  <span className="text-sm font-bold text-purple-800 block mt-0.5">
+                    -{formatCurrency(proc.returned_amount, currency)}
+                  </span>
+                </div>
+              )}
+              {Number(proc.returned_amount || 0) > 0 && (
+                <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl">
+                  <span className="block text-[10px] uppercase font-bold text-blue-700 tracking-wider">
+                    Net Kept Bill
+                  </span>
+                  <span className="text-sm font-bold text-blue-800 block mt-0.5">
+                    {formatCurrency(proc.net_total, currency)}
+                  </span>
+                </div>
+              )}
               <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl">
                 <span className="block text-[10px] uppercase font-bold text-emerald-700 tracking-wider">
                   Amount Paid
@@ -273,19 +313,31 @@ export function ProcurementDetailDrawer({
                 </span>
               </div>
               <div className={`p-3 rounded-xl border ${
-                Number(proc.amount_due || 0) > 0 
+                Number(proc.amount_to_return || 0) > 0
+                  ? 'bg-rose-50/70 border-rose-200'
+                  : Number(proc.amount_due || 0) > 0 
                   ? 'bg-red-50/70 border-red-200' 
                   : 'bg-slate-100 border-slate-200'
               }`}>
                 <span className={`block text-[10px] uppercase font-bold tracking-wider ${
-                  Number(proc.amount_due || 0) > 0 ? 'text-red-700' : 'text-slate-500'
+                  Number(proc.amount_to_return || 0) > 0
+                    ? 'text-rose-700'
+                    : Number(proc.amount_due || 0) > 0
+                    ? 'text-red-700'
+                    : 'text-slate-500'
                 }`}>
-                  Balance Due
+                  {Number(proc.amount_to_return || 0) > 0 ? 'Refund Due' : 'Balance Due'}
                 </span>
                 <span className={`text-sm font-bold block mt-0.5 ${
-                  Number(proc.amount_due || 0) > 0 ? 'text-red-800' : 'text-slate-600'
+                  Number(proc.amount_to_return || 0) > 0
+                    ? 'text-rose-800'
+                    : Number(proc.amount_due || 0) > 0
+                    ? 'text-red-800'
+                    : 'text-slate-600'
                 }`}>
-                  {formatCurrency(proc.amount_due, currency)}
+                  {Number(proc.amount_to_return || 0) > 0
+                    ? formatCurrency(proc.amount_to_return, currency)
+                    : formatCurrency(proc.amount_due, currency)}
                 </span>
               </div>
             </div>
