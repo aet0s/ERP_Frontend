@@ -102,9 +102,16 @@ function MainAppRoutes() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        revalidateSession();
+      }
+    }, 25000);
+
     return () => {
       window.removeEventListener('focus', revalidateSession);
       document.removeEventListener('visibilitychange', handleVisibility);
+      clearInterval(intervalId);
     };
   }, [isPortalPath, isSuperAdminPath, isAcceptInvitePath]);
 

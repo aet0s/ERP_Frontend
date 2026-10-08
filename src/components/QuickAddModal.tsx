@@ -6,6 +6,7 @@ import { useToast } from '../context';
 import { Modal } from './ui/Modal';
 import { Field } from './ui/Field';
 import { Button } from './ui/Button';
+import { cleanNumericString, handleNumericKeyDown } from '../lib/utils';
 
 export function QuickAddModal({
   type,
@@ -105,20 +106,28 @@ export function QuickAddModal({
               </Field>
               <Field label="Reorder Level">
                 <input
-                  className={inputCls}
-                  inputMode="decimal"
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0"
                   value={form.reorder_level}
-                  onChange={(event) => setForm({ ...form, reorder_level: event.target.value })}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(event) => setForm({ ...form, reorder_level: cleanNumericString(event.target.value) })}
                 />
               </Field>
             </div>
             {type === 'product' ? (
               <Field label="Default Price">
                 <input
-                  className={inputCls}
-                  inputMode="decimal"
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0.00"
                   value={form.default_price}
-                  onChange={(event) => setForm({ ...form, default_price: event.target.value })}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(event) => setForm({ ...form, default_price: cleanNumericString(event.target.value) })}
                 />
               </Field>
             ) : null}

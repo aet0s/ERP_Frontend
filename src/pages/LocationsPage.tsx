@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import { MapPin, Plus, Check, Trash2, Star } from 'lucide-react';
+import { MapPin, Plus, Check, Trash2, Star, Pencil } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast, useConfirm } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
@@ -12,48 +12,55 @@ import { Button } from '../components/ui/Button';
 import { StatusBadge } from '../components/ui/StatusBadge';
 import { Modal } from '../components/ui/Modal';
 
-function LocationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+function LocationModal({ location, onClose, onSaved }: { location?: any; onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
-  const [codeUserEdited, setCodeUserEdited] = useState(false);
+  const [codeUserEdited, setCodeUserEdited] = useState(Boolean(location?.location_code));
   const [form, setForm] = useState({
-    location_code: 'LOC-0001',
-    name: '',
-    address: '',
-    city: '',
-    state: '',
-    notes: '',
-    is_default: false
+    location_code: location?.location_code || 'LOC-0001',
+    name: location?.name || '',
+    address: location?.address || '',
+    city: location?.city || '',
+    state: location?.state || '',
+    notes: location?.notes || '',
+    is_default: Boolean(location?.is_default)
   });
 
   useEffect(() => {
-    api.get('/api/numbering-series/next/location')
-      .then((res) => {
-        if (res?.data?.next_code && !codeUserEdited) {
-          setForm((f) => ({ ...f, location_code: res.data.next_code }));
-        }
-      })
-      .catch(() => {});
-  }, [codeUserEdited]);
+    if (!location && !codeUserEdited) {
+      api.get('/api/numbering-series/next/location')
+        .then((res) => {
+          if (res?.data?.next_code && !codeUserEdited) {
+            setForm((f) => ({ ...f, location_code: res.data.next_code }));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [location, codeUserEdited]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/api/locations', form);
-      toast('Location created successfully');
+      if (location?.id) {
+        await api.put(`/api/locations/${location.id}`, form);
+        toast('Location updated successfully');
+      } else {
+        await api.post('/api/locations', form);
+        toast('Location created successfully');
+      }
       onSaved();
     } catch (err: any) {
-      toast(err.response?.data?.error || 'Failed to create location', 'error');
+      toast(err.response?.data?.error || `Failed to ${location ? 'update' : 'create'} location`, 'error');
     }
   };
 
   const inputCls = "w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition";
 
   return (
-    <Modal title="Add Location / Warehouse" onClose={onClose}>
+    <Modal title={location ? "Edit Location / Warehouse" : "Add Location / Warehouse"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Location Code">
           <input
-            className={`${inputCls} font-mono font-medium`}
+            className={`${inputCls} font-mono font-bold text-blue-700 bg-blue-50/50`}
             placeholder="e.g. LOC-0001"
             value={form.location_code}
             onChange={(e) => {
@@ -61,7 +68,7 @@ function LocationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
               setForm({ ...form, location_code: e.target.value });
             }}
           />
-          <p className="text-[11px] text-slate-400 mt-0.5">Auto-generated sequential code. You can edit if needed.</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">Unique warehouse / location code identifier.</p>
         </Field>
         <Field label="Location Name">
           <input className={inputCls} required placeholder="e.g. Main Warehouse, Plant 2" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -80,20 +87,22 @@ function LocationModal({ onClose, onSaved }: { onClose: () => void; onSaved: () 
         <Field label="Notes / Operating Hours">
           <textarea className={`${inputCls} h-20 resize-y`} placeholder="Any extra operational details..." value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
         </Field>
-        <div className="flex items-center gap-2 pt-2">
-          <input
-            type="checkbox"
-            id="is_default"
-            checked={form.is_default}
-            onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
-            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
-          />
-          <label htmlFor="is_default" className="text-sm text-slate-700 font-medium cursor-pointer">
-            Set as default primary location
-          </label>
-        </div>
+        {!location?.is_default && (
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              type="checkbox"
+              id="is_default"
+              checked={form.is_default}
+              onChange={(e) => setForm({ ...form, is_default: e.target.checked })}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+            />
+            <label htmlFor="is_default" className="text-sm text-slate-700 font-medium cursor-pointer">
+              Set as default primary location
+            </label>
+          </div>
+        )}
         <div className="flex justify-end pt-3 border-t border-slate-100">
-          <Button type="submit" icon={<Check size={16} />}>Create Location</Button>
+          <Button type="submit" icon={<Check size={16} />}>{location ? 'Save Changes' : 'Create Location'}</Button>
         </div>
       </form>
     </Modal>
@@ -106,6 +115,7 @@ export function LocationsPage() {
   const { canView, canCreate, canEdit, canDelete } = usePermissions('locations');
   const [refresh, setRefresh] = useState(0);
   const [showModal, setShowModal] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<any | null>(null);
 
   const makeDefault = async (id: string) => {
     try {
@@ -146,10 +156,10 @@ export function LocationsPage() {
   const columns: TableColumn<AnyRow>[] = [
     {
       key: 'location_code',
-      label: 'Code',
+      label: 'Location Code',
       sortable: true,
       render: (row) => (
-        <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">
+        <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200 shadow-2xs">
           {row.location_code || '—'}
         </span>
       )
@@ -182,10 +192,19 @@ export function LocationsPage() {
       align: 'right' as const,
       render: (row: any) => (
         <div className="flex items-center justify-end gap-2">
+          {canEdit && (
+            <button
+              onClick={() => setEditingLocation(row)}
+              className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer inline-flex items-center gap-1 px-2 py-1 rounded hover:bg-slate-100"
+              title="Edit location details and code"
+            >
+              <Pencil size={13} /> Edit
+            </button>
+          )}
           {canEdit && !row.is_default ? (
             <button
               onClick={() => makeDefault(String(row.id))}
-              className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer"
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer px-2 py-1"
             >
               Make Default
             </button>
@@ -230,9 +249,13 @@ export function LocationsPage() {
         rowId={(row) => String(row.id || '')}
       />
 
-      {showModal && canCreate ? (
-        <LocationModal onClose={() => setShowModal(false)} onSaved={() => { setRefresh((v) => v + 1); setShowModal(false); }} />
-      ) : null}
+      {(showModal || editingLocation) && (
+        <LocationModal
+          location={editingLocation}
+          onClose={() => { setShowModal(false); setEditingLocation(null); }}
+          onSaved={() => { setRefresh((v) => v + 1); setShowModal(false); setEditingLocation(null); }}
+        />
+      )}
     </div>
   );
 }

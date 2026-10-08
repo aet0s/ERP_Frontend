@@ -181,3 +181,92 @@ export function generateUUID(): string {
     return v.toString(16);
   });
 }
+
+/**
+ * Sanitizes numeric input strings:
+ * - Completely strips commas, spaces, letters, plus signs, and exponentials.
+ * - Allows at most one decimal point (if allowDecimal is true).
+ * - Restricts to positive / non-negative numbers unless allowNegative is explicitly true.
+ */
+export function cleanNumericString(val: any, allowDecimal = true, allowNegative = false): string {
+  if (val === null || val === undefined) return '';
+  let str = String(val).trim();
+  // Strip commas
+  str = str.replace(/,/g, '');
+  // Strip plus signs and exponent chars
+  str = str.replace(/[\+eE]/g, '');
+
+  if (!allowNegative) {
+    str = str.replace(/-/g, '');
+  } else {
+    // Keep at most one leading minus
+    const isNeg = str.startsWith('-');
+    str = str.replace(/-/g, '');
+    if (isNeg) str = '-' + str;
+  }
+
+  if (!allowDecimal) {
+    str = str.replace(/\./g, '');
+    return str.replace(/[^0-9-]/g, '');
+  }
+
+  // Strip anything that is not a digit, minus, or dot
+  str = str.replace(/[^0-9.-]/g, '');
+
+  // Keep only the first decimal point
+  const isNegative = str.startsWith('-');
+  const unsigned = isNegative ? str.slice(1) : str;
+  const parts = unsigned.split('.');
+  if (parts.length > 2) {
+    str = (isNegative ? '-' : '') + parts[0] + '.' + parts.slice(1).join('');
+  }
+  return str;
+}
+
+/**
+ * Parses numeric value safely, stripping commas first so "1,000" doesn't produce NaN.
+ */
+export function parseSafeNumber(val: any): number {
+  if (val === null || val === undefined || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const cleaned = cleanNumericString(val, true, true);
+  const num = Number(cleaned);
+  return isNaN(num) ? 0 : num;
+}
+
+/**
+ * Blocks invalid keys on numeric inputs:
+ * - Commas are strictly forbidden
+ * - 'e', 'E', '+' are strictly forbidden
+ * - '-' is forbidden unless allowNegative is true
+ * - '.' is forbidden if allowDecimal is false or if input already has a decimal point
+ */
+export function handleNumericKeyDown(
+  e: React.KeyboardEvent<HTMLInputElement>,
+  allowDecimal = true,
+  allowNegative = false
+) {
+  // Disallow comma, exponential e/E, and plus
+  if (e.key === ',' || e.key === 'e' || e.key === 'E' || e.key === '+') {
+    e.preventDefault();
+    return;
+  }
+  // Disallow minus if not allowed
+  if (!allowNegative && e.key === '-') {
+    e.preventDefault();
+    return;
+  }
+  // Disallow duplicate minus
+  if (allowNegative && e.key === '-' && e.currentTarget.value.includes('-')) {
+    e.preventDefault();
+    return;
+  }
+  // Disallow decimal if not allowed, or if already has a decimal
+  if (e.key === '.') {
+    if (!allowDecimal || e.currentTarget.value.includes('.')) {
+      e.preventDefault();
+      return;
+    }
+  }
+}
+

@@ -4,7 +4,7 @@ import { Check, CircleDollarSign } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast, useWorkspace } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
-import { formatCurrency, dateIso, formatDate } from '../lib/utils';
+import { formatCurrency, dateIso, formatDate, cleanNumericString, handleNumericKeyDown, parseSafeNumber } from '../lib/utils';
 import { DatePicker } from '../components/ui/DatePicker';
 import type { AnyRow, TableColumn } from '../lib/types';
 import { DataTable } from '../components/DataTable';
@@ -35,7 +35,7 @@ function EditExpenseModal({
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     try {
-      await api.put(`/api/expenses/${expense.id}`, { ...form, amount: Number(form.amount) });
+      await api.put(`/api/expenses/${expense.id}`, { ...form, amount: parseSafeNumber(form.amount) });
       toast('Expense updated successfully');
       onSaved();
       onClose();
@@ -57,7 +57,17 @@ function EditExpenseModal({
           />
         </Field>
         <Field label="Amount">
-          <input className={inputCls} required inputMode="decimal" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+          <input
+            type="number"
+            step="any"
+            min="0.01"
+            className={`${inputCls} font-mono`}
+            required
+            placeholder="0.00"
+            value={form.amount}
+            onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+            onChange={e => setForm({ ...form, amount: cleanNumericString(e.target.value) })}
+          />
         </Field>
         <Field label="Date">
           <input className={inputCls} type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -98,7 +108,7 @@ export function ExpensesPage() {
   const submitNewExpense = async (event: FormEvent) => {
     event.preventDefault();
     try {
-      await api.post('/api/expenses', { ...form, amount: Number(form.amount) });
+      await api.post('/api/expenses', { ...form, amount: parseSafeNumber(form.amount) });
       toast('Expense recorded successfully');
       setForm({ category: 'other', amount: '', date: dateIso(), notes: '' });
       setRefresh((value) => value + 1);
@@ -158,7 +168,19 @@ export function ExpensesPage() {
                 options={['labor', 'transport', 'electricity', 'rent', 'maintenance', 'other'].map((cat) => ({ value: cat, label: cat }))}
               />
             </Field>
-            <Field label="Amount"><input className={formInputCls} required inputMode="decimal" placeholder="0.00" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} /></Field>
+            <Field label="Amount">
+              <input
+                type="number"
+                step="any"
+                min="0.01"
+                className={`${formInputCls} font-mono`}
+                required
+                placeholder="0.00"
+                value={form.amount}
+                onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                onChange={(event) => setForm({ ...form, amount: cleanNumericString(event.target.value) })}
+              />
+            </Field>
             <Field label="Date"><DatePicker value={form.date} onChange={(val) => setForm({ ...form, date: val })} /></Field>
             <Field label="Notes"><input className={formInputCls} placeholder="Invoice details, supplier info..." value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></Field>
             

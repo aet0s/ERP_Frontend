@@ -4,7 +4,7 @@ import { Check, ReceiptText, Plus, Trash2, RotateCcw, PackageCheck, CheckCircle2
 import { api } from '../lib/api';
 import { useToast, useWorkspace, useConfirm } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
-import { formatCurrency, dateIso, formatDate, csvDownload } from '../lib/utils';
+import { formatCurrency, dateIso, formatDate, csvDownload, cleanNumericString, handleNumericKeyDown, parseSafeNumber } from '../lib/utils';
 import type { AnyRow, TableColumn } from '../lib/types';
 import { useOptions } from '../hooks/useOptions';
 import { DataTable } from '../components/DataTable';
@@ -198,7 +198,18 @@ function VendorPaymentModal({
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Record Next Vendor Payment Installment</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Payment Amount Paid *">
-                <input className={formInputCls} type="number" step="any" min="0.01" max={currentProc.amount_due} required value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                <input
+                  className={`${formInputCls} font-mono`}
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  max={currentProc.amount_due}
+                  required
+                  placeholder="0.00"
+                  value={payAmount}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setPayAmount(cleanNumericString(e.target.value))}
+                />
               </Field>
               <Field label="Payment Date">
                 <DatePicker value={payDate} onChange={setPayDate} />
@@ -252,6 +263,7 @@ export function ProcurementPage() {
   ]);
   const [discountPercent, setDiscountPercent] = useState('0');
   const [amountPaid, setAmountPaid] = useState('0');
+  const [receiveImmediately, setReceiveImmediately] = useState(true);
   const [procDate, setProcDate] = useState(dateIso());
   const [notes, setNotes] = useState('');
 
@@ -297,11 +309,11 @@ export function ProcurementPage() {
     });
   };
 
-  const discountRate = Math.min(100, Math.max(0, Number(discountPercent) || 0));
+  const discountRate = Math.min(100, Math.max(0, parseSafeNumber(discountPercent)));
 
   const grossSubtotal = lineItems.reduce((acc, row) => {
-    const q = Number(row.quantity) || 0;
-    const r = Number(row.rate_per_unit) || 0;
+    const q = parseSafeNumber(row.quantity);
+    const r = parseSafeNumber(row.rate_per_unit);
     return acc + q * r;
   }, 0);
 
@@ -311,9 +323,9 @@ export function ProcurementPage() {
   // Discount is given on MRP (quantity * rate) first, and then GST or Tax is calculated on that discounted MRP:
   const discountFactor = 1 - (discountRate / 100);
   const calculatedTax = lineItems.reduce((acc, row) => {
-    const q = Number(row.quantity) || 0;
-    const r = Number(row.rate_per_unit) || 0;
-    const t = Number(row.tax_rate) || 0;
+    const q = parseSafeNumber(row.quantity);
+    const r = parseSafeNumber(row.rate_per_unit);
+    const t = parseSafeNumber(row.tax_rate);
     const lineDiscountedMRP = (q * r) * discountFactor;
     return acc + (lineDiscountedMRP * t) / 100;
   }, 0);
@@ -324,7 +336,7 @@ export function ProcurementPage() {
     e.preventDefault();
     if (!vendorId) return toast('Please select a vendor', 'error');
 
-    const validItems = lineItems.filter(l => l.item_id && Number(l.quantity) > 0);
+    const validItems = lineItems.filter(l => l.item_id && parseSafeNumber(l.quantity) > 0);
     if (validItems.length === 0) {
       return toast('Procurement must contain at least one valid item with a positive quantity', 'error');
     }
@@ -337,22 +349,24 @@ export function ProcurementPage() {
         items: validItems.map(l => ({
           item_id: l.item_id,
           raw_material_id: l.item_id,
-          quantity: Number(l.quantity),
-          unit_price: Number(l.rate_per_unit),
-          rate_per_unit: Number(l.rate_per_unit),
-          tax_rate: Number(l.tax_rate || 0)
+          quantity: parseSafeNumber(l.quantity),
+          unit_price: parseSafeNumber(l.rate_per_unit),
+          rate_per_unit: parseSafeNumber(l.rate_per_unit),
+          tax_rate: parseSafeNumber(l.tax_rate)
         })),
         lines: validItems.map(l => ({
           item_id: l.item_id,
-          quantity: Number(l.quantity),
-          rate_per_unit: Number(l.rate_per_unit),
-          tax_rate: Number(l.tax_rate || 0)
+          quantity: parseSafeNumber(l.quantity),
+          rate_per_unit: parseSafeNumber(l.rate_per_unit),
+          tax_rate: parseSafeNumber(l.tax_rate)
         })),
         discount_amount: Number(calculatedDiscountAmount.toFixed(2)),
         discount_percent: Number(discountRate) || 0,
-        amount_paid: Number(amountPaid) || 0,
-        paid: Number(amountPaid) || 0,
+        amount_paid: parseSafeNumber(amountPaid),
+        paid: parseSafeNumber(amountPaid),
         payment_method: 'Cash',
+        receive_immediately: receiveImmediately,
+        status: receiveImmediately ? 'Received' : 'Sent to Vendor',
         notes
       };
 
@@ -511,17 +525,16 @@ export function ProcurementPage() {
       align: 'right',
       render: (row) => {
         const isReceived = row.status === 'Received';
-        const isDispatched = row.status === 'Dispatched by Vendor' || row.status === 'Dispatched';
 
         return (
           <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-            {/* 1. When vendor has dispatched and not yet received: show Receive Goods button if user has approve permission */}
-            {canApprove && isDispatched && !isReceived && (
+            {/* Show Receive Goods button on any procurement that has not been received yet */}
+            {canApprove && !isReceived && row.status !== 'Cancelled' && row.status !== 'Returned' && (
               <button
                 type="button"
                 onClick={() => handleReceiveProcurement(row)}
                 className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white shadow-sm ring-2 ring-blue-400/30 transition cursor-pointer"
-                title="Confirm receipt of dispatched goods & update inventory stock"
+                title="Confirm receipt of goods & update inventory stock"
               >
                 <PackageCheck size={13} /> Receive Goods
               </button>
@@ -676,13 +689,43 @@ export function ProcurementPage() {
                         />
                       </div>
                       <div className="col-span-2">
-                        <input className={`${formInputCls} text-right`} required inputMode="decimal" value={line.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} />
+                        <input
+                          type="number"
+                          step="any"
+                          min="0.0001"
+                          className={`${formInputCls} text-right font-mono`}
+                          required
+                          placeholder="0"
+                          value={line.quantity}
+                          onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                          onChange={(e) => updateLine(idx, 'quantity', cleanNumericString(e.target.value))}
+                        />
                       </div>
                       <div className="col-span-2">
-                        <input className={`${formInputCls} text-right`} required inputMode="decimal" value={line.rate_per_unit} onChange={(e) => updateLine(idx, 'rate_per_unit', e.target.value)} />
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          className={`${formInputCls} text-right font-mono`}
+                          required
+                          placeholder="0.00"
+                          value={line.rate_per_unit}
+                          onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                          onChange={(e) => updateLine(idx, 'rate_per_unit', cleanNumericString(e.target.value))}
+                        />
                       </div>
                       <div className="col-span-2">
-                        <input className={`${formInputCls} text-right`} inputMode="decimal" value={line.tax_rate} onChange={(e) => updateLine(idx, 'tax_rate', e.target.value)} />
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          max="100"
+                          className={`${formInputCls} text-right font-mono`}
+                          placeholder="0"
+                          value={line.tax_rate}
+                          onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                          onChange={(e) => updateLine(idx, 'tax_rate', cleanNumericString(e.target.value))}
+                        />
                       </div>
                       <div className="col-span-1 text-center">
                         <button type="button" onClick={() => removeLine(idx)} className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer">
@@ -737,7 +780,8 @@ export function ProcurementPage() {
                       className={`${formInputCls} pr-8 font-mono`}
                       placeholder="0"
                       value={discountPercent}
-                      onChange={(e) => setDiscountPercent(e.target.value)}
+                      onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                      onChange={(e) => setDiscountPercent(cleanNumericString(e.target.value))}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs pointer-events-none">
                       %
@@ -750,10 +794,15 @@ export function ProcurementPage() {
                     Amount Paid Now
                   </span>
                   <input
-                    className={formInputCls}
+                    type="number"
+                    step="any"
+                    min="0"
+                    className={`${formInputCls} font-mono`}
+                    placeholder="0.00"
                     inputMode="decimal"
                     value={amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
+                    onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                    onChange={(e) => setAmountPaid(cleanNumericString(e.target.value))}
                   />
                 </div>
 
@@ -765,6 +814,18 @@ export function ProcurementPage() {
                     Record Procurement
                   </Button>
                 </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 select-none">
+                  <input
+                    type="checkbox"
+                    checked={receiveImmediately}
+                    onChange={(e) => setReceiveImmediately(e.target.checked)}
+                    className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 border-slate-300"
+                  />
+                  <span>Receive items into warehouse inventory stock immediately upon recording</span>
+                </label>
               </div>
             </form>
           </section>
@@ -1158,8 +1219,9 @@ function OwnerReturnModal({
                         max={item.received_quantity}
                         disabled={!item.selected}
                         value={item.return_quantity}
-                        onChange={(e) => updateQuantity(idx, e.target.value)}
-                        className="w-full text-right font-bold text-slate-900 border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-600 disabled:bg-slate-100"
+                        onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                        onChange={(e) => updateQuantity(idx, cleanNumericString(e.target.value))}
+                        className="w-full text-right font-bold text-slate-900 border border-slate-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-600 disabled:bg-slate-100 font-mono"
                       />
                     </div>
                     <div className="col-span-2 text-right font-mono font-bold text-slate-800">
@@ -1320,10 +1382,30 @@ function CreateDebitNoteModal({
                   />
                 </div>
                 <div className="col-span-3">
-                  <input className={`${inputCls} text-right`} required inputMode="decimal" value={line.quantity} onChange={(e) => updateLine(idx, 'quantity', e.target.value)} />
+                  <input
+                    type="number"
+                    step="any"
+                    min="0.0001"
+                    className={`${inputCls} text-right font-mono`}
+                    required
+                    placeholder="0"
+                    value={line.quantity}
+                    onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                    onChange={(e) => updateLine(idx, 'quantity', cleanNumericString(e.target.value))}
+                  />
                 </div>
                 <div className="col-span-2">
-                  <input className={`${inputCls} text-right`} required inputMode="decimal" value={line.rate_per_unit} onChange={(e) => updateLine(idx, 'rate_per_unit', e.target.value)} />
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className={`${inputCls} text-right font-mono`}
+                    required
+                    placeholder="0.00"
+                    value={line.rate_per_unit}
+                    onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                    onChange={(e) => updateLine(idx, 'rate_per_unit', cleanNumericString(e.target.value))}
+                  />
                 </div>
                 <div className="col-span-1 text-center">
                   <button type="button" onClick={() => removeLine(idx)} className="text-red-500 hover:text-red-700 p-1 cursor-pointer">

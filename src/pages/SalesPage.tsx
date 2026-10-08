@@ -4,7 +4,7 @@ import { Check, Plus, ShoppingCart, Download, FileText, Trash2, RotateCcw, Searc
 import { api } from '../lib/api';
 import { useToast, useWorkspace } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
-import { formatCurrency, formatNumber, dateIso, formatDate, csvDownload } from '../lib/utils';
+import { formatCurrency, formatNumber, dateIso, formatDate, csvDownload, cleanNumericString, handleNumericKeyDown, parseSafeNumber } from '../lib/utils';
 import type { AnyRow, TableColumn } from '../lib/types';
 import { useOptions } from '../hooks/useOptions';
 import { DataTable } from '../components/DataTable';
@@ -177,7 +177,18 @@ function CustomerPaymentModal({
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Record Next Payment / EMI Installment</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Payment Amount Received *">
-                <input className={formInputCls} type="number" step="any" min="0.01" max={currentSale.amount_due} required value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                <input
+                  className={`${formInputCls} font-mono`}
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  max={currentSale.amount_due}
+                  required
+                  placeholder="0.00"
+                  value={payAmount}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setPayAmount(cleanNumericString(e.target.value))}
+                />
               </Field>
               <Field label="Payment Date">
                 <DatePicker value={payDate} onChange={setPayDate} />
@@ -438,10 +449,11 @@ function CreditNoteModal({
               type="number"
               min="0.01"
               step="any"
-              className={`${formCls} ${errors.totalAmount ? 'border-red-400' : ''}`}
+              className={`${formCls} font-mono ${errors.totalAmount ? 'border-red-400' : ''}`}
               placeholder={`0.00 ${workspace?.currency || 'INR'}`}
               value={totalAmount}
-              onChange={(e) => setTotalAmount(e.target.value)}
+              onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+              onChange={(e) => setTotalAmount(cleanNumericString(e.target.value))}
             />
             {errors.totalAmount && <p className={errCls}>{errors.totalAmount}</p>}
           </Field>
@@ -526,7 +538,17 @@ export function SalesPage() {
   const [tab, setTab] = usePersistentTab<'invoices' | 'credit_notes'>('sales_tab', 'invoices', 'tab');
   const [refresh, setRefresh] = useState(0);
   const customers = useOptions('/api/customers', refresh) as any[];
-  const goods = useOptions('/api/finished-goods', refresh) as any[];
+  const locations = useOptions('/api/locations', refresh) as any[];
+  const [locationId, setLocationId] = useState('');
+  const [tableLocationFilter, setTableLocationFilter] = useState('');
+  const defaultLocation = locations.find((l) => l.is_default) || locations[0];
+  const activeLocationId = locationId || defaultLocation?.id || '';
+  const selectedLocation = locations.find((l) => l.id === activeLocationId);
+
+  const goodsEndpoint = activeLocationId
+    ? `/api/finished-goods?location_id=${activeLocationId}`
+    : '/api/finished-goods';
+  const goods = useOptions(goodsEndpoint, refresh) as any[];
 
   const [detail, setDetail] = useState<string | null>(null);
   const [exportModalData, setExportModalData] = useState<any | null>(null);
@@ -558,11 +580,6 @@ export function SalesPage() {
   const [notes, setNotes] = useState('');
   const [terms] = useState('1. Goods once sold will not be taken back.\n2. Payment due within credit terms.');
 
-  const locations = useOptions('/api/locations', refresh) as any[];
-  const [locationId, setLocationId] = useState('');
-  const [tableLocationFilter, setTableLocationFilter] = useState('');
-  const defaultLocation = locations.find((l) => l.is_default) || locations[0];
-
   // Helper to determine the top/final packaged product configuration for a finished good
   const getFinalPackagingConfig = (fg: any) => {
     const list = fg?.packaging_levels?.length ? fg.packaging_levels : fg?.packaging_configs;
@@ -585,7 +602,35 @@ export function SalesPage() {
       const def = locations.find((l) => l.is_default) || locations[0];
       if (def) setLocationId(def.id);
     }
-  }, [locations]);
+  }, [locations, locationId]);
+
+  // When warehouse changes or goods reloads, re-evaluate packaging configs for selected line items
+  useEffect(() => {
+    if (!goods || goods.length === 0) return;
+    setLineItems((prev) =>
+      prev.map((line) => {
+        if (!line.finished_good_id) return line;
+        const fg = goods.find((g) => g.id === line.finished_good_id);
+        if (!fg) return line;
+        const list = fg.packaging_levels?.length ? fg.packaging_levels : fg.packaging_configs;
+        if (!list || list.length === 0) return line;
+        const currentPkg = list.find((p: any) => p.id === line.packaging_config_id);
+        if (currentPkg && Number(currentPkg.available_stock || 0) > 0) {
+          return line;
+        }
+        const inStock = list.filter((p: any) => Number(p.available_stock || 0) > 0);
+        if (inStock.length > 0) {
+          const preferred = inStock.find((p: any) => p.is_default) || inStock[0];
+          return {
+            ...line,
+            packaging_config_id: preferred.id,
+            rate_per_unit: String(preferred.selling_price || fg.default_price || line.rate_per_unit)
+          };
+        }
+        return line;
+      })
+    );
+  }, [goods]);
 
   // Customer Credit Limit & Details
   const selectedCustomer = customers.find((c) => c.id === customerId);
@@ -681,11 +726,11 @@ export function SalesPage() {
   );
 
   // Tax and Rounding Preview Logic
-  const discountRate = Math.min(100, Math.max(0, Number(discountPercent) || 0));
+  const discountRate = Math.min(100, Math.max(0, parseSafeNumber(discountPercent)));
 
   const grossSubtotal = lineItems.reduce((acc, row) => {
-    const q = Number(row.quantity) || 0;
-    const r = Number(row.rate_per_unit) || 0;
+    const q = parseSafeNumber(row.quantity);
+    const r = parseSafeNumber(row.rate_per_unit);
     return acc + q * r;
   }, 0);
 
@@ -698,9 +743,9 @@ export function SalesPage() {
   let stockValidationError = '';
 
   lineItems.forEach((line, idx) => {
-    const q = Number(line.quantity) || 0;
-    const r = Number(line.rate_per_unit) || 0;
-    const taxPct = Number(line.tax_rate) || 0;
+    const q = parseSafeNumber(line.quantity);
+    const r = parseSafeNumber(line.rate_per_unit);
+    const taxPct = parseSafeNumber(line.tax_rate);
     const lineDiscountedMRP = (q * r) * discountFactor;
     const lineTax = (lineDiscountedMRP * taxPct) / 100;
     totalTax += lineTax;
@@ -713,11 +758,12 @@ export function SalesPage() {
         ? Number(activePkg.available_stock || 0)
         : Number(matchedFg?.loose_stock != null ? matchedFg.loose_stock : 0);
       const unitName = activePkg ? (activePkg.package_unit || activePkg.name || activePkg.package_name) : (matchedFg?.unit || 'units');
+      const locName = selectedLocation ? selectedLocation.name : 'selected warehouse';
 
       if (availableInUnit <= 0) {
-        stockValidationError = `Line ${idx + 1}: "${matchedFg?.name} (${unitName})" is out of stock (0 available). Cannot sell unproduced packaging tier!`;
+        stockValidationError = `Line ${idx + 1}: "${matchedFg?.name} (${unitName})" is out of stock (0 available) in ${locName}!`;
       } else if (q > availableInUnit) {
-        stockValidationError = `Line ${idx + 1}: Requested ${q} ${unitName} of "${matchedFg?.name}${activePkg ? ` (${activePkg.name || activePkg.package_name})` : ''}", but only ${availableInUnit} ${unitName} available in stock!`;
+        stockValidationError = `Line ${idx + 1}: Requested ${q} ${unitName} of "${matchedFg?.name}${activePkg ? ` (${activePkg.name || activePkg.package_name})` : ''}", but only ${availableInUnit} ${unitName} available in ${locName}!`;
       }
     }
   });
@@ -731,6 +777,7 @@ export function SalesPage() {
     if (!lineItems[0].finished_good_id) return toast('Select at least one product line', 'error');
 
     // Strict Inventory Stock Check Validation
+    const locName = selectedLocation ? selectedLocation.name : 'the selected warehouse';
     for (let i = 0; i < lineItems.length; i++) {
       const line = lineItems[i];
       if (!line.finished_good_id) continue;
@@ -741,16 +788,16 @@ export function SalesPage() {
         ? Number(activePkg.available_stock || 0)
         : Number(matchedFg?.loose_stock != null ? matchedFg.loose_stock : 0);
       const unitName = activePkg ? (activePkg.package_unit || activePkg.name || activePkg.package_name) : (matchedFg?.unit || 'units');
-      const requestedQty = Number(line.quantity || 0);
+      const requestedQty = parseSafeNumber(line.quantity);
 
       if (availableInUnit <= 0) {
         return toast(
-          `Cannot create invoice! Item "${matchedFg?.name} (${unitName})" is out of stock (0 available). You can only sell finished products that have actually been produced in warehouse inventory.`,
+          `Cannot create invoice! Item "${matchedFg?.name} (${unitName})" is out of stock (0 available) in ${locName}. You can only sell finished products that are available in this warehouse.`,
           'error'
         );
       } else if (requestedQty > availableInUnit) {
         return toast(
-          `Cannot create invoice! Item "${matchedFg?.name} (${unitName})" has only ${availableInUnit} ${unitName} available in stock, but you requested ${requestedQty}.`,
+          `Cannot create invoice! Item "${matchedFg?.name} (${unitName})" has only ${availableInUnit} ${unitName} available in ${locName}, but you requested ${requestedQty}.`,
           'error'
         );
       }
@@ -764,6 +811,10 @@ export function SalesPage() {
         const pkg = pkgLvl || pkgCfg;
         return {
           ...l,
+          quantity: parseSafeNumber(l.quantity),
+          rate_per_unit: parseSafeNumber(l.rate_per_unit),
+          discount_percent: parseSafeNumber(l.discount_percent),
+          tax_rate: parseSafeNumber(l.tax_rate),
           packaging_level_id: pkgLvl ? pkgLvl.id : null,
           packaging_config_id: pkgCfg ? pkgCfg.id : (pkgLvl ? pkgLvl.id : null),
           package_name: pkg ? (pkg.name || pkg.package_name) : null,
@@ -774,14 +825,14 @@ export function SalesPage() {
 
       const res = await api.post('/api/invoices', {
         customer_id: customerId || null,
-        location_id: locationId || null,
+        location_id: activeLocationId || null,
         date: invoiceDate,
         due_date: dueDate || null,
         place_of_supply: placeOfSupply,
         items: itemsPayload,
         invoice_discount: Number(calculatedDiscountAmount.toFixed(2)) || 0,
         discount_percent: Number(discountRate) || 0,
-        amount_received: Number(amountReceived) || 0,
+        amount_received: parseSafeNumber(amountReceived),
         terms_and_conditions: terms,
         notes
       });
@@ -1045,9 +1096,9 @@ export function SalesPage() {
                   />
                 </Field>
 
-                <Field label="Sales Location">
+                <Field label="Sales Location (Warehouse)">
                   <Select
-                    value={locationId || defaultLocation?.id || ''}
+                    value={activeLocationId}
                     onChange={setLocationId}
                     options={locations.map((l) => ({ value: l.id, label: `${l.name} ${l.is_default ? '(Default)' : ''}` }))}
                   />
@@ -1085,7 +1136,14 @@ export function SalesPage() {
 
               {/* Product Search Header */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Line Items Picker</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Line Items Picker</span>
+                  {selectedLocation && (
+                    <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
+                      Warehouse: {selectedLocation.name}
+                    </span>
+                  )}
+                </div>
                 <div className="relative w-72">
                   <Search size={15} className="absolute left-3 top-2.5 text-slate-400" />
                   <input
@@ -1112,7 +1170,9 @@ export function SalesPage() {
                   <div className="min-w-[960px]">
                     <div className="bg-slate-900 text-white text-xs font-semibold px-4 py-2.5 grid grid-cols-12 gap-2 items-center">
                       <div className="col-span-4">PRODUCT / FINISHED GOOD</div>
-                      <div className="col-span-2 text-center">INVENTORY STOCK</div>
+                      <div className="col-span-2 text-center uppercase tracking-wider text-[11px]">
+                        STOCK IN {selectedLocation ? selectedLocation.name : 'WAREHOUSE'}
+                      </div>
                       <div className="col-span-2 text-right">QTY TO SELL</div>
                       <div className="col-span-2 text-right">RATE / UNIT</div>
                       <div className="col-span-1 text-center font-bold text-blue-300">GST %</div>
@@ -1157,7 +1217,7 @@ export function SalesPage() {
                                 }
                                 return {
                                   value: g.id,
-                                  label: `${g.name} — Stock: ${stockLabel}`
+                                  label: `${g.name} — Stock: ${stockLabel} (${selectedLocation?.name || 'Warehouse'})`
                                 };
                               })
                             ]}
@@ -1207,7 +1267,7 @@ export function SalesPage() {
                                 {availableInUnit > 0 ? `${formatNumber(availableInUnit, 0)} ${unitName}` : `0 ${unitName}`}
                               </span>
                               <span className={`text-[10px] font-mono mt-1 ${availableInUnit > 0 ? 'text-emerald-700 font-medium' : 'text-red-500 font-bold'}`}>
-                                {availableInUnit > 0 ? `In Stock (${unitName})` : `Out of Stock`}
+                                {availableInUnit > 0 ? `In Stock (${selectedLocation?.name || 'Warehouse'})` : `Out of Stock in ${selectedLocation?.name || 'Warehouse'}`}
                               </span>
                             </div>
                           ) : (
@@ -1219,12 +1279,15 @@ export function SalesPage() {
                         <div className="col-span-2 space-y-1">
                           <div className="relative">
                             <input
-                              className={`${formInputCls} text-right font-medium pr-14 ${isExceeded ? 'border-red-500 focus:border-red-600 focus:ring-red-500/20 bg-red-50 text-red-900 font-bold' : ''}`}
+                              type="number"
+                              step="any"
+                              min="0.0001"
+                              className={`${formInputCls} text-right font-medium pr-14 font-mono ${isExceeded ? 'border-red-500 focus:border-red-600 focus:ring-red-500/20 bg-red-50 text-red-900 font-bold' : ''}`}
                               required
-                              inputMode="decimal"
-                              value={line.quantity}
-                              onChange={(e) => updateLine(idx, 'quantity', e.target.value)}
                               placeholder="0"
+                              value={line.quantity}
+                              onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                              onChange={(e) => updateLine(idx, 'quantity', cleanNumericString(e.target.value))}
                             />
                             <span className="absolute right-2.5 top-2.5 text-[11px] font-semibold text-slate-400 pointer-events-none uppercase">
                               {unitName}
@@ -1240,11 +1303,15 @@ export function SalesPage() {
                         {/* Column 4: Rate per Unit */}
                         <div className="col-span-2 space-y-1">
                           <input
-                            className={`${formInputCls} text-right font-medium`}
+                            type="number"
+                            step="any"
+                            min="0"
+                            className={`${formInputCls} text-right font-medium font-mono`}
                             required
-                            inputMode="decimal"
+                            placeholder="0.00"
                             value={line.rate_per_unit}
-                            onChange={(e) => updateLine(idx, 'rate_per_unit', e.target.value)}
+                            onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                            onChange={(e) => updateLine(idx, 'rate_per_unit', cleanNumericString(e.target.value))}
                           />
                           {selectedFg && (
                             <div className="text-[10px] text-right">
@@ -1338,7 +1405,8 @@ export function SalesPage() {
                       className={`${formInputCls} pr-8 font-mono`}
                       placeholder="0"
                       value={discountPercent}
-                      onChange={(e) => setDiscountPercent(e.target.value)}
+                      onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                      onChange={(e) => setDiscountPercent(cleanNumericString(e.target.value))}
                     />
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs pointer-events-none">
                       %
@@ -1346,7 +1414,17 @@ export function SalesPage() {
                   </div>
                 </div>
                 <Field label="Amount Received Now">
-                  <input className={formInputCls} inputMode="decimal" value={amountReceived} onChange={(e) => setAmountReceived(e.target.value)} />
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    className={`${formInputCls} font-mono`}
+                    placeholder="0.00"
+                    inputMode="decimal"
+                    value={amountReceived}
+                    onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                    onChange={(e) => setAmountReceived(cleanNumericString(e.target.value))}
+                  />
                 </Field>
                 <div className="flex items-end">
                   <Button type="submit" icon={<Check size={16} />} disabled={!!stockValidationError} className="w-full">

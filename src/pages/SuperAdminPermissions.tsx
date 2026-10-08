@@ -56,9 +56,13 @@ export function SuperAdminPermissions() {
     if (!permissionWorkspaceId) return;
     try {
       setSavingPermissions(true);
-      await api.put(`/admin/workspaces/${permissionWorkspaceId}/permissions`, { permissions });
+      const res = await api.put(`/admin/workspaces/${permissionWorkspaceId}/permissions`, { permissions });
       toast('Roles & Permissions matrix updated successfully!', 'success');
-      await loadPermissions();
+      if (res.data?.permissions && Array.isArray(res.data.permissions)) {
+        setPermissions(res.data.permissions);
+      } else {
+        await loadPermissions();
+      }
     } catch (err: any) {
       toast(err.response?.data?.error || 'Failed to save permissions', 'error');
     } finally { setSavingPermissions(false); }

@@ -9,7 +9,7 @@ import {
 import { api } from '../lib/api';
 import { useToast, useWorkspace } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
-import { formatCurrency, formatNumber, formatDate, getCurrencySymbol, csvDownload, generateUUID } from '../lib/utils';
+import { formatCurrency, formatNumber, formatDate, getCurrencySymbol, csvDownload, generateUUID, cleanNumericString, handleNumericKeyDown } from '../lib/utils';
 import type { TableColumn } from '../lib/types';
 import { DataTable } from '../components/DataTable';
 import { PageTitle } from '../components/ui/PageTitle';
@@ -376,15 +376,42 @@ function CatalogModal({
                 />
               </Field>
               <Field label="Reorder Level Threshold">
-                <input className={inputCls} inputMode="decimal" placeholder="0" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0"
+                  value={form.reorder_level}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setForm({ ...form, reorder_level: cleanNumericString(e.target.value) })}
+                />
               </Field>
               <Field label={`Unit / Purchase Price (${currencySymbol})`}>
-                <input className={inputCls} inputMode="decimal" placeholder="0.00" value={form.last_purchase_price} onChange={(e) => setForm({ ...form, last_purchase_price: e.target.value })} />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0.00"
+                  value={form.last_purchase_price}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setForm({ ...form, last_purchase_price: cleanNumericString(e.target.value) })}
+                />
               </Field>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Field label={`Catalog Selling Price (${currencySymbol})`}>
-                <input className={inputCls} inputMode="decimal" placeholder="0.00" value={form.default_price} onChange={(e) => setForm({ ...form, default_price: e.target.value })} />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0.00"
+                  value={form.default_price}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setForm({ ...form, default_price: cleanNumericString(e.target.value) })}
+                />
               </Field>
               <Field label="Status">
                 <Select
@@ -411,12 +438,30 @@ function CatalogModal({
                 <input className={inputCls} placeholder="e.g. 7320" value={form.hsn_code} onChange={(e) => setForm({ ...form, hsn_code: e.target.value })} />
               </Field>
               <Field label={`Default Selling Price (${currencySymbol})`}>
-                <input className={inputCls} inputMode="decimal" placeholder="0.00" value={form.default_price} onChange={(e) => setForm({ ...form, default_price: e.target.value })} />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0.00"
+                  value={form.default_price}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setForm({ ...form, default_price: cleanNumericString(e.target.value) })}
+                />
               </Field>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Field label="Reorder Level Threshold">
-                <input className={inputCls} inputMode="decimal" placeholder="0" value={form.reorder_level} onChange={(e) => setForm({ ...form, reorder_level: e.target.value })} />
+                <input
+                  type="number"
+                  step="any"
+                  min="0"
+                  className={`${inputCls} font-mono`}
+                  placeholder="0"
+                  value={form.reorder_level}
+                  onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                  onChange={(e) => setForm({ ...form, reorder_level: cleanNumericString(e.target.value) })}
+                />
               </Field>
             </div>
           </>
