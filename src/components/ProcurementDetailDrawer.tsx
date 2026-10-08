@@ -218,25 +218,25 @@ export function ProcurementDetailDrawer({
                 <CheckCircle2 className="w-4 h-4" />
                 Stock Received on {formatDate(proc.received_date || proc.updated_at)}
               </div>
-            ) : (proc.status === 'Dispatched by Vendor' || proc.status === 'Dispatched') ? (
+            ) : (proc.status !== 'Cancelled' && proc.status !== 'Returned') ? (
               canApprove ? (
                 <Button
                   variant="primary"
                   disabled={receiving}
                   onClick={handleReceiveInDrawer}
-                  className="text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm ring-2 ring-blue-400/30"
+                  className="text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm ring-2 ring-blue-400/30 cursor-pointer"
                 >
                   <PackageCheck className="w-4 h-4 mr-1.5" />
                   {receiving ? 'Receiving Stock...' : 'Receive Goods into Stock'}
                 </Button>
               ) : (
                 <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-                  Dispatched by Vendor (Approval Permission Required)
+                  {proc.status || 'Pending'} (Approval Permission Required)
                 </span>
               )
             ) : (
               <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
-                Awaiting Vendor Dispatch
+                {proc.status}
               </span>
             )}
           </div>

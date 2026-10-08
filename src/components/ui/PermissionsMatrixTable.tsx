@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Check,
   Search,
@@ -121,6 +121,15 @@ export function PermissionsMatrixTable({
       setInitialSnapshot(JSON.parse(JSON.stringify(permissions)));
     }
   }, [permissions]);
+
+  // Reset initialSnapshot when saving goes true -> false
+  const prevSavingRef = useRef(saving);
+  useEffect(() => {
+    if (prevSavingRef.current && !saving) {
+      setInitialSnapshot(JSON.parse(JSON.stringify(permissions)));
+    }
+    prevSavingRef.current = saving;
+  }, [saving, permissions]);
 
   // Exclude vendor and customer from internal matrix
   const internalPermissions = useMemo(() => {

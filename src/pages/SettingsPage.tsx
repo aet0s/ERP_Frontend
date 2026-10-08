@@ -152,13 +152,20 @@ export function SettingsPage({ user }: { user: UserSummary }) {
           if (err.response?.status === 403) {
             return { data: null, forbidden: true };
           }
+          toast(err.response?.data?.error || 'Failed to load billing details', 'error');
           return { data: null, forbidden: false };
         }),
-        api.get('/api/workspace'),
+        api.get('/api/workspace').catch(err => {
+          toast(err.response?.data?.error || 'Failed to load workspace settings', 'error');
+          return { data: null };
+        }),
         api.get('/api/workspace/connection-requests').catch(() => ({ data: { requests: [] } }))
       ];
       if (isOwnerOrAdmin) {
-        calls.push(api.get('/api/permissions'));
+        calls.push(api.get('/api/permissions').catch(err => {
+          toast(err.response?.data?.error || 'Failed to load permissions matrix', 'error');
+          return { data: [] };
+        }));
       }
       const [billingRes, wsRes, connRes, permRes] = await Promise.all(calls);
       setBilling(billingRes?.data || null);

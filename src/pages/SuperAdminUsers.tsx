@@ -31,6 +31,8 @@ const ROLES = [
   { value: 'owner', label: 'Owner', description: 'Full administrative control of workspace' },
   { value: 'manager', label: 'Manager', description: 'Operational control over catalog, inventory, production' },
   { value: 'accounts', label: 'Accounts', description: 'Financial ledger, invoicing, bills, and payments' },
+  { value: 'production_manager', label: 'Production Manager', description: 'BOM recipes, manufacturing orders, and shift logs' },
+  { value: 'sales_manager', label: 'Sales Manager', description: 'Sales orders, customer directory, and dispatches' },
   { value: 'staff', label: 'Staff', description: 'Floor operations, order processing, stock movements' },
   { value: 'vendor', label: 'Vendor', description: 'Vendor portal access to purchase orders' },
   { value: 'customer', label: 'Customer', description: 'Customer portal access to sales orders' }
@@ -337,8 +339,12 @@ export function SuperAdminUsers() {
                                 ? 'bg-blue-50 text-blue-700 border-blue-200'
                                 : r === 'accounts'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : r === 'vendor' || r === 'customer'
+                                : r === 'production_manager'
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : r === 'sales_manager'
+                                ? 'bg-sky-50 text-sky-700 border-sky-200'
+                                : r === 'vendor' || r === 'customer'
+                                ? 'bg-orange-50 text-orange-700 border-orange-200'
                                 : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                           >

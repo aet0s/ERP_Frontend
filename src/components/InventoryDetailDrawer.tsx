@@ -17,7 +17,9 @@ import {
   TrendingUp,
   Info,
   Receipt,
-  Store
+  Store,
+  Calculator,
+  Users
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatCurrency, formatNumber, formatDate } from '../lib/utils';
@@ -217,9 +219,9 @@ export function InventoryDetailDrawer({
             </div>
           </div>
 
-          {/* Multi-Vendor Costing & Procurement Breakdown (For Raw Materials) */}
-          {detail.item_type === 'raw_material' && (
-            <div className="p-4 bg-white border border-slate-200/90 rounded-2xl space-y-3.5 shadow-2xs">
+          {/* Multi-Vendor Costing & Procurement Breakdown (For Raw Materials & Multi-Source Items) */}
+          {(detail.item_type === 'raw_material' || (detail.vendor_purchases && detail.vendor_purchases.length > 0)) && (
+            <div className="p-4 bg-white border border-slate-200/90 rounded-2xl space-y-4 shadow-2xs">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                   <Store size={14} className="text-blue-600" />
@@ -234,10 +236,10 @@ export function InventoryDetailDrawer({
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-[11px] text-slate-600 space-y-1">
                 <div className="flex items-center gap-1.5 font-bold text-slate-800">
                   <Info size={13} className="text-blue-600 shrink-0" />
-                  <span>How different vendor prices are handled:</span>
+                  <span>How multiple vendor rates are calculated:</span>
                 </div>
                 <p className="leading-relaxed">
-                  When raw materials are purchased from different vendors at different rates, inventory valuation and production recipe consumption automatically use the <strong>Volume-Weighted Average Cost (WAC)</strong>. Every unit in stock is valued at this blended average cost, ensuring accurate asset valuation and recipe profit margins.
+                  When stock is acquired from different vendors at different rates, valuation is computed using the <strong>Volume-Weighted Average Cost (WAC)</strong> based on existing stock and each new entry's quantity contribution.
                 </p>
               </div>
 
@@ -248,7 +250,7 @@ export function InventoryDetailDrawer({
                   <strong className="font-mono text-sm text-blue-950 font-bold block mt-0.5">
                     {formatCurrency(detail.weighted_avg_cost || detail.unit_cost, workspace?.currency)}
                   </strong>
-                  <span className="text-[9px] text-slate-500">Valuation rate</span>
+                  <span className="text-[9px] text-slate-500">Blended valuation rate</span>
                 </div>
 
                 <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
@@ -276,19 +278,122 @@ export function InventoryDetailDrawer({
                 </div>
               </div>
 
-              {/* Vendor Purchases List */}
+              {/* Mathematical WAC Calculation Card */}
+              {detail.wac_breakdown && (
+                <div className="p-3 bg-gradient-to-r from-blue-50/70 to-slate-50 border border-blue-200/80 rounded-xl space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                      <Calculator size={13} className="text-blue-600" />
+                      WAC Calculation Formula & Contribution Breakdown
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">
+                      WAC = Σ(Qty × Rate) ÷ Total Qty
+                    </span>
+                  </div>
+                  <p className="font-mono text-[11px] text-slate-700 bg-white p-2 rounded-lg border border-slate-200">
+                    {detail.wac_breakdown.formula_text}
+                  </p>
+                </div>
+              )}
+
+              {/* Multi-Vendor Stacked Bar */}
+              {detail.vendor_breakdown && detail.vendor_breakdown.length > 1 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                    <span className="flex items-center gap-1">
+                      <Users size={12} className="text-slate-500" />
+                      Stock Share by Vendor ({detail.vendor_breakdown.length} Vendors)
+                    </span>
+                    <span className="text-[10px] font-normal text-slate-500">
+                      Weighted by purchase quantity
+                    </span>
+                  </div>
+                  {/* Proportional visual bar */}
+                  <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                    {detail.vendor_breakdown.map((v: any, idx: number) => {
+                      const colors = [
+                        'bg-blue-500',
+                        'bg-emerald-500',
+                        'bg-amber-500',
+                        'bg-purple-500',
+                        'bg-rose-500',
+                        'bg-cyan-500'
+                      ];
+                      const color = colors[idx % colors.length];
+                      return (
+                        <div
+                          key={idx}
+                          style={{ width: `${v.quantity_percentage}%` }}
+                          className={`${color} h-full transition-all`}
+                          title={`${v.vendor_name}: ${v.total_quantity} ${detail.unit} (${v.quantity_percentage}%)`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Vendor Breakdown Cards */}
+              {detail.vendor_breakdown && detail.vendor_breakdown.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-[11px] font-bold text-slate-700 block">
+                    Vendor Contribution to Unit WAC
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {detail.vendor_breakdown.map((v: any, idx: number) => {
+                      const dotColors = [
+                        'bg-blue-500',
+                        'bg-emerald-500',
+                        'bg-amber-500',
+                        'bg-purple-500',
+                        'bg-rose-500',
+                        'bg-cyan-500'
+                      ];
+                      const dotColor = dotColors[idx % dotColors.length];
+                      return (
+                        <div key={idx} className="p-2.5 bg-slate-50/80 rounded-xl border border-slate-200/80 text-xs space-y-1">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className="font-bold text-slate-900 truncate flex items-center gap-1.5">
+                              <span className={`w-2 h-2 rounded-full ${dotColor} shrink-0`} />
+                              {v.vendor_name}
+                            </span>
+                            <span className="font-mono font-bold text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/60 shrink-0">
+                              {v.quantity_percentage}% share
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-600 font-mono pt-1 border-t border-slate-200/60">
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-sans">Supplied Qty:</span>
+                              <strong>{formatNumber(v.total_quantity)} {detail.unit}</strong>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-sans">Avg Rate:</span>
+                              <strong>{formatCurrency(v.average_rate, workspace?.currency)}</strong>
+                            </div>
+                            <div className="col-span-2 pt-0.5">
+                              <span className="text-[10px] text-slate-400 block font-sans">Cost Contribution to WAC:</span>
+                              <strong className="text-blue-700">+{formatCurrency(v.wac_contribution, workspace?.currency)} / {detail.unit}</strong>
+                              <span className="text-[10px] text-slate-400 ml-1">({v.quantity_percentage}% × {formatCurrency(v.average_rate, workspace?.currency)})</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* All Purchases & Inward Entries Table */}
               {detail.vendor_purchases && detail.vendor_purchases.length > 0 && (
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
                     <span className="flex items-center gap-1">
                       <Receipt size={12} className="text-slate-500" />
-                      Vendor Procurement Purchases ({detail.vendor_purchases.length})
+                      All Stock Inward & Purchase Entries ({detail.vendor_purchases.length})
                     </span>
-                    {detail.vendor_pricing_summary?.distinct_vendors_count > 0 && (
-                      <span className="text-[10px] font-normal text-slate-500">
-                        {detail.vendor_pricing_summary.distinct_vendors_count} distinct {detail.vendor_pricing_summary.distinct_vendors_count === 1 ? 'vendor' : 'vendors'}
-                      </span>
-                    )}
+                    <span className="text-[10px] font-normal text-slate-500">
+                      Individual purchase contributions
+                    </span>
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
@@ -296,11 +401,13 @@ export function InventoryDetailDrawer({
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50/80 text-[10px] text-slate-500 uppercase font-bold tracking-wider">
                           <th className="text-left px-3 py-2">Date</th>
-                          <th className="text-left px-3 py-2">Vendor</th>
+                          <th className="text-left px-3 py-2">Vendor / Source</th>
                           <th className="text-left px-3 py-2">PO #</th>
                           <th className="text-right px-3 py-2">Quantity</th>
+                          <th className="text-right px-3 py-2">Stock Share</th>
                           <th className="text-right px-3 py-2">Rate / Unit</th>
                           <th className="text-right px-3 py-2">Total Cost</th>
+                          <th className="text-right px-3 py-2">WAC Contrib.</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-mono">
@@ -318,11 +425,17 @@ export function InventoryDetailDrawer({
                             <td className="px-3 py-2 text-right text-slate-800 whitespace-nowrap text-[11px]">
                               {formatNumber(p.quantity)} {detail.unit}
                             </td>
+                            <td className="px-3 py-2 text-right text-blue-700 whitespace-nowrap text-[11px] font-bold">
+                              {p.weight_percentage != null ? `${p.weight_percentage}%` : '—'}
+                            </td>
                             <td className="px-3 py-2 text-right font-bold text-slate-900 whitespace-nowrap text-[11px]">
                               {formatCurrency(p.rate_per_unit, workspace?.currency)}
                             </td>
-                            <td className="px-3 py-2 text-right font-bold text-blue-700 whitespace-nowrap text-[11px]">
+                            <td className="px-3 py-2 text-right font-bold text-slate-800 whitespace-nowrap text-[11px]">
                               {formatCurrency(p.total_amount || (Number(p.quantity) * Number(p.rate_per_unit)), workspace?.currency)}
+                            </td>
+                            <td className="px-3 py-2 text-right font-bold text-emerald-700 whitespace-nowrap text-[11px]" title={`Contribution to unit WAC: +${formatCurrency(p.wac_contribution, workspace?.currency)} / ${detail.unit}`}>
+                              {p.wac_contribution != null ? `+${formatCurrency(p.wac_contribution, workspace?.currency)}` : '—'}
                             </td>
                           </tr>
                         ))}

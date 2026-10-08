@@ -6,7 +6,7 @@ import { useToast, useWorkspace } from '../context';
 import { PageTitle } from '../components/ui/PageTitle';
 import { Field } from '../components/ui/Field';
 import { Button } from '../components/ui/Button';
-import { getCurrencySymbol, generateUUID } from '../lib/utils';
+import { getCurrencySymbol, generateUUID, cleanNumericString, handleNumericKeyDown } from '../lib/utils';
 
 // Helper validators
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
@@ -1557,11 +1557,14 @@ export function OnboardingWizard() {
                   </Field>
                   <Field label="Reorder Level" error={errors[`${m.local_id}_reorder_level`]} required>
                     <input
-                      className={inputCls(!!errors[`${m.local_id}_reorder_level`])}
-                      inputMode="decimal"
+                      type="number"
+                      step="any"
+                      min="0"
+                      className={`${inputCls(!!errors[`${m.local_id}_reorder_level`])} font-mono`}
                       placeholder="100"
                       value={m.reorder_level}
-                      onChange={(e) => updateRowField(setMaterials, m.local_id, 'reorder_level', e.target.value)}
+                      onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                      onChange={(e) => updateRowField(setMaterials, m.local_id, 'reorder_level', cleanNumericString(e.target.value))}
                     />
                   </Field>
                   <div className="flex justify-end">
@@ -1643,11 +1646,14 @@ export function OnboardingWizard() {
                   </Field>
                   <Field label={`Default Selling Price (${currencySymbol})`} error={errors[`${g.local_id}_default_price`]} required>
                     <input
-                      className={inputCls(!!errors[`${g.local_id}_default_price`])}
-                      inputMode="decimal"
+                      type="number"
+                      step="any"
+                      min="0"
+                      className={`${inputCls(!!errors[`${g.local_id}_default_price`])} font-mono`}
                       placeholder="500.00"
                       value={g.default_price}
-                      onChange={(e) => updateRowField(setGoods, g.local_id, 'default_price', e.target.value)}
+                      onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                      onChange={(e) => updateRowField(setGoods, g.local_id, 'default_price', cleanNumericString(e.target.value))}
                     />
                   </Field>
                 </div>
@@ -1655,11 +1661,14 @@ export function OnboardingWizard() {
                   <div className="md:col-span-2">
                     <Field label="Reorder Level" error={errors[`${g.local_id}_reorder_level`]} required>
                       <input
-                        className={inputCls(!!errors[`${g.local_id}_reorder_level`])}
-                        inputMode="decimal"
+                        type="number"
+                        step="any"
+                        min="0"
+                        className={`${inputCls(!!errors[`${g.local_id}_reorder_level`])} font-mono`}
                         placeholder="50"
                         value={g.reorder_level}
-                        onChange={(e) => updateRowField(setGoods, g.local_id, 'reorder_level', e.target.value)}
+                        onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
+                        onChange={(e) => updateRowField(setGoods, g.local_id, 'reorder_level', cleanNumericString(e.target.value))}
                       />
                     </Field>
                   </div>
