@@ -768,11 +768,15 @@ export function PeoplePage() {
       });
 
       let inviteLink = res.data.invite_link || '';
-      if (inviteLink && typeof window !== 'undefined' && window.location.origin && !window.location.hostname.includes('localhost')) {
+      let inviteText = res.data.invite_text || '';
+      if (inviteLink && typeof window !== 'undefined' && window.location.origin) {
         try {
           const parsed = new URL(inviteLink);
-          if (parsed.hostname.includes('localhost') || parsed.hostname.includes('127.0.0.1')) {
+          if (parsed.origin !== window.location.origin) {
             inviteLink = `${window.location.origin}${parsed.pathname}${parsed.search}`;
+            if (inviteText) {
+              inviteText = inviteText.split(parsed.origin).join(window.location.origin);
+            }
           }
         } catch (_) {}
       }
@@ -782,7 +786,7 @@ export function PeoplePage() {
         link: inviteLink,
         email: inviteEmail,
         name: inviteName,
-        invite_text: res.data.invite_text,
+        invite_text: inviteText,
         already_registered: !!inviteLink.includes('login'),
         can_reinvite: res.data.can_reinvite,
         message: res.data.message
