@@ -22,20 +22,35 @@ const attachAuthHeaders = (config: any) => {
   const url = config.url || '';
   const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
 
-  const isPortalReq =
-    url.includes('/portal') ||
-    pathname.startsWith('/portal') ||
-    pathname.startsWith('/vendor-portal') ||
-    pathname.startsWith('/customer-portal');
-
+  // Platform admin requests
   const isPlatformAdminReq =
-    url.includes('/admin') ||
-    url.includes('/platform-admin') ||
-    url.includes('/super-admin') ||
-    url.includes('/superadmin') ||
+    url.startsWith('/platform-admin') ||
+    url.startsWith('/super-admin') ||
+    url.startsWith('/superadmin') ||
+    url.startsWith('/admin') ||
     pathname.startsWith('/platform-admin') ||
     pathname.startsWith('/super-admin') ||
     pathname.startsWith('/superadmin');
+
+  //Party invitation management routes (e.g. /api/vendors/:id/portal-invite, /api/customers/:id/portal-invite)
+  // are internal ERP tenant actions that require the ERP user's token (erp_token), NOT the partner portal token.
+  const isPartyInviteRoute = url.includes('/portal-invite');
+
+  // Partner Portal requests: only when actively using partner portal endpoints or pages
+  const isPortalReq =
+    !isPartyInviteRoute &&
+    !isPlatformAdminReq &&
+    (
+      url.startsWith('/portal/') ||
+      url.startsWith('/vendor-portal/') ||
+      url.startsWith('/customer-portal/') ||
+      url === '/portal/login' ||
+      url === '/portal/check-invite' ||
+      ((pathname.startsWith('/portal') ||
+        pathname.startsWith('/vendor-portal') ||
+        pathname.startsWith('/customer-portal')) &&
+        !url.startsWith('/api/'))
+    );
 
   if (isPlatformAdminReq) {
     const platformToken = localStorage.getItem('erp_platform_token');
@@ -112,6 +127,7 @@ api.interceptors.response.use(
         url.includes('/auth/refresh') ||
         url.includes('/invite-info') ||
         url.includes('/accept-invite') ||
+        url.includes('/portal-invite') ||
         url.includes('/portal/') ||
         url.includes('/vendor-portal/') ||
         url.includes('/customer-portal/') ||
