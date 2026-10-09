@@ -263,7 +263,7 @@ export function ProcurementPage() {
   ]);
   const [discountPercent, setDiscountPercent] = useState('0');
   const [amountPaid, setAmountPaid] = useState('0');
-  const [receiveImmediately, setReceiveImmediately] = useState(true);
+  const [receiveImmediately, setReceiveImmediately] = useState(false);
   const [procDate, setProcDate] = useState(dateIso());
   const [notes, setNotes] = useState('');
 
@@ -371,11 +371,17 @@ export function ProcurementPage() {
       };
 
       const res = await api.post('/api/procurements', payload);
-      toast(`Procurement ${res.data?.procurement_number || ''} recorded successfully!`, 'success');
+      toast(
+        receiveImmediately
+          ? `Procurement ${res.data?.procurement_number || ''} recorded and stock received!`
+          : `Purchase order ${res.data?.procurement_number || ''} sent to vendor!`,
+        'success'
+      );
       setLineItems([{ item_id: '', quantity: '1', rate_per_unit: '0', tax_rate: '18' }]);
       setDiscountPercent('0');
       setAmountPaid('0');
       setNotes('');
+      setReceiveImmediately(false);
       setRefresh((val) => val + 1);
     } catch (err: any) {
       toast(err.response?.data?.error || 'Failed to record procurement', 'error');
@@ -811,7 +817,7 @@ export function ProcurementPage() {
                     Action
                   </span>
                   <Button type="submit" icon={<Check size={16} />} className="w-full h-[38px] shadow-sm">
-                    Record Procurement
+                    {receiveImmediately ? 'Record & Receive In Stock' : 'Send Order to Vendor'}
                   </Button>
                 </div>
               </div>
@@ -824,7 +830,7 @@ export function ProcurementPage() {
                     onChange={(e) => setReceiveImmediately(e.target.checked)}
                     className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 border-slate-300"
                   />
-                  <span>Receive items into warehouse inventory stock immediately upon recording</span>
+                  <span>Direct Inward: Receive items into warehouse inventory stock immediately (skip vendor portal accept & dispatch)</span>
                 </label>
               </div>
             </form>
