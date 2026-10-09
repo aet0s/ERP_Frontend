@@ -24,7 +24,7 @@ interface ContactPerson {
   role: string;
 }
 
-// Validation helpers
+//Validation helpers
 const isValidEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email).trim());
 const isValidPhone = (phone: string) => {
   const digits = String(phone).replace(/\D/g, '');
@@ -147,7 +147,7 @@ function PartyModal({
             }));
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [config.type, config.row?.id]);
 
@@ -159,7 +159,7 @@ function PartyModal({
       try {
         const parsed = JSON.parse(config.row.contacts);
         if (Array.isArray(parsed)) parsedContacts = parsed;
-      } catch {}
+      } catch { }
     }
     if (parsedContacts.length > 0) {
       return parsedContacts.map((c: any) => ({
@@ -394,10 +394,9 @@ function PartyModal({
   };
 
   const inputCls = (hasError?: boolean) =>
-    `w-full bg-white border ${
-      hasError
-        ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
-        : 'border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20'
+    `w-full bg-white border ${hasError
+      ? 'border-rose-400 focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20'
+      : 'border-slate-300 focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20'
     } rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none transition`;
 
   const errorCount = Object.keys(errors).length;
@@ -757,7 +756,7 @@ export function PeoplePage() {
     if (e) e.preventDefault();
     if (!inviteTarget) return;
     try {
-      const endpoint = inviteTarget.type === 'vendor' 
+      const endpoint = inviteTarget.type === 'vendor'
         ? `/api/vendors/${inviteTarget.row.id}/portal-invite`
         : `/api/customers/${inviteTarget.row.id}/portal-invite`;
 
@@ -778,7 +777,7 @@ export function PeoplePage() {
               inviteText = inviteText.split(parsed.origin).join(window.location.origin);
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
       toast(res.data.message || 'Portal invitation generated successfully!', 'success');
@@ -821,18 +820,16 @@ export function PeoplePage() {
             }
           }}
           title="Click to toggle Active / Inactive"
-          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold transition cursor-pointer ${
-            row.status === 'Inactive'
+          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold transition cursor-pointer ${row.status === 'Inactive'
               ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-          }`}
+            }`}
         >
           {row.status || 'Active'}
         </button>
       ) : (
-        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${
-          row.status === 'Inactive' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800'
-        }`}>
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${row.status === 'Inactive' ? 'bg-slate-100 text-slate-600' : 'bg-emerald-100 text-emerald-800'
+          }`}>
           {row.status || 'Active'}
         </span>
       )
@@ -936,7 +933,7 @@ export function PeoplePage() {
   return (
     <div className="space-y-6">
       <PageTitle icon={<Users />} title="Parties & Portal Onboarding" subtitle="Manage vendors, customers, payment history and portal invites." />
-      
+
       {/* Tabs */}
       <div className="inline-flex p-1 bg-white border border-slate-200/80 rounded-xl shadow-2xs">
         <button

@@ -32,7 +32,7 @@ const attachAuthHeaders = (config: any) => {
     pathname.startsWith('/super-admin') ||
     pathname.startsWith('/superadmin');
 
-  // Party invitation management routes (e.g. /api/vendors/:id/portal-invite, /api/customers/:id/portal-invite)
+  //Party invitation management routes (e.g. /api/vendors/:id/portal-invite, /api/customers/:id/portal-invite)
   // are internal ERP tenant actions that require the ERP user's token (erp_token), NOT the partner portal token.
   const isPartyInviteRoute = url.includes('/portal-invite');
 
