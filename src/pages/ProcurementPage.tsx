@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Check, ReceiptText, Plus, Trash2, RotateCcw, PackageCheck, CheckCircle2, Truck, Copy } from 'lucide-react';
+import { Check, ReceiptText, Plus, Trash2, RotateCcw, PackageCheck, CheckCircle2, Truck, Copy, Clock, XCircle } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast, useWorkspace, useConfirm } from '../context';
 import { usePermissions } from '../hooks/usePermissions';
@@ -341,6 +341,14 @@ export function ProcurementPage() {
       return toast('Procurement must contain at least one valid item with a positive quantity', 'error');
     }
 
+    const paidVal = parseSafeNumber(amountPaid);
+    if (paidVal > overallTotal) {
+      return toast(
+        `Amount Paid Now (${formatCurrency(paidVal, workspace?.currency)}) cannot be higher than the overall total of the bill generated (${formatCurrency(overallTotal, workspace?.currency)})`,
+        'error'
+      );
+    }
+
     try {
       const payload = {
         vendor_id: vendorId,
@@ -531,22 +539,47 @@ export function ProcurementPage() {
       align: 'right',
       render: (row) => {
         const isReceived = row.status === 'Received';
+        const isDispatched = row.status === 'Dispatched by Vendor' || row.status === 'Dispatched';
+        const isSent = row.status === 'Sent to Vendor' || row.status === 'Pending Vendor Confirmation' || row.status === 'Draft';
+        const isConfirmed = row.status === 'Confirmed by Vendor' || row.status === 'Vendor Confirmed' || row.status === 'Accepted by Vendor';
+        const isDeclined = row.status === 'Rejected by Vendor' || row.status === 'Declined' || row.status === 'Cancelled';
 
         return (
           <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-            {/* Show Receive Goods button on any procurement that has not been received yet */}
-            {canApprove && !isReceived && row.status !== 'Cancelled' && row.status !== 'Returned' && (
+            {/* 1. Only show Receive Goods button when vendor has dispatched the shipment */}
+            {canApprove && isDispatched && (
               <button
                 type="button"
                 onClick={() => handleReceiveProcurement(row)}
                 className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1.5 rounded-xl border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white shadow-sm ring-2 ring-blue-400/30 transition cursor-pointer"
-                title="Confirm receipt of goods & update inventory stock"
+                title="Vendor dispatched shipment. Confirm physical goods receipt & add to inventory stock"
               >
                 <PackageCheck size={13} /> Receive Goods
               </button>
             )}
 
-            {/* 2. After workspace admin has received the goods: show Stock Received badge and Return button */}
+            {/* 2. When order is sent to vendor but vendor has not yet accepted */}
+            {isSent && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-lg border border-amber-200" title="Order placed. Awaiting vendor to accept purchase order in Partner Portal.">
+                <Clock size={12} /> Awaiting Acceptance
+              </span>
+            )}
+
+            {/* 3. When vendor has accepted/confirmed the order, but not yet dispatched */}
+            {isConfirmed && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-200" title="Vendor accepted order. Awaiting vendor dispatch.">
+                <Truck size={12} /> Awaiting Dispatch
+              </span>
+            )}
+
+            {/* 4. When order was declined or cancelled */}
+            {isDeclined && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700 bg-rose-50 px-2 py-1 rounded-lg border border-rose-200" title={row.rejection_reason || 'Declined by vendor'}>
+                <XCircle size={12} /> Declined by Vendor
+              </span>
+            )}
+
+            {/* 5. After workspace admin has received the goods: show Stock Received badge and Return button */}
             {isReceived && (
               <>
                 <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
@@ -796,20 +829,31 @@ export function ProcurementPage() {
                 </div>
 
                 <div className="flex flex-col gap-1.5 w-full">
-                  <span className="text-[11px] font-semibold tracking-wider uppercase text-slate-600">
-                    Amount Paid Now
-                  </span>
+                  <div className="flex justify-between items-center text-[11px] font-semibold tracking-wider uppercase text-slate-600">
+                    <span>Amount Paid Now</span>
+                    {overallTotal > 0 && (
+                      <span className="text-[10px] text-slate-400 font-normal lowercase font-mono">
+                        max: {formatCurrency(overallTotal, workspace?.currency)}
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
                     step="any"
                     min="0"
-                    className={`${formInputCls} font-mono`}
+                    max={overallTotal > 0 ? overallTotal : undefined}
+                    className={`${formInputCls} font-mono ${parseSafeNumber(amountPaid) > overallTotal ? 'border-rose-500 focus:border-rose-600 focus:ring-rose-200' : ''}`}
                     placeholder="0.00"
                     inputMode="decimal"
                     value={amountPaid}
                     onKeyDown={(e) => handleNumericKeyDown(e, true, false)}
                     onChange={(e) => setAmountPaid(cleanNumericString(e.target.value))}
                   />
+                  {parseSafeNumber(amountPaid) > overallTotal && (
+                    <span className="text-[11px] font-bold text-rose-600">
+                      Amount cannot exceed total ({formatCurrency(overallTotal, workspace?.currency)})
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5 w-full">
