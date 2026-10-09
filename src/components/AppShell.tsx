@@ -29,7 +29,8 @@ import {
   CheckCircle2,
   ChevronDown,
   X,
-  Sparkles
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { WorkspaceContext, useToast } from '../context';
@@ -95,6 +96,8 @@ export type WorkspaceConnection = {
   company_status: string;
   requested_at?: string;
   joined_at?: string;
+  invite_expires_at?: string;
+  is_expired?: boolean;
 };
 
 interface PortalContextType {
@@ -933,6 +936,31 @@ export function AppShell({
 
             {/* Main Page Route Views */}
             <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0 h-full overflow-y-auto bg-slate-50">
+              {/* Partner Portal Pending Requests Notification Banner */}
+              {isPartnerPortal && pendingRequests.length > 0 && location.pathname !== '/portal/connections' && (
+                <div className="mb-5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                      <Link2 size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-bold text-amber-950">
+                        You have {pendingRequests.length} pending workspace connection {pendingRequests.length === 1 ? 'request' : 'requests'}
+                      </h4>
+                      <p className="text-[11px] text-amber-800">
+                        A client workspace wants to connect with your portal account. Review and accept the invitation to begin collaborating.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/portal/connections"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition shadow-xs self-start sm:self-auto shrink-0"
+                  >
+                    Review Requests <ArrowRight size={13} />
+                  </Link>
+                </div>
+              )}
+
               <Routes>
                 {/* ERP Internal Routes */}
                 <Route path="/" element={

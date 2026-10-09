@@ -376,6 +376,15 @@ export function SettingsPage({ user }: { user: UserSummary }) {
       toast('Workspace role permissions updated successfully!', 'success');
       const res = await api.get('/api/permissions');
       setPermissions(res.data);
+      localStorage.setItem('erp_permissions_updated_at', String(Date.now()));
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('erp_permissions_sync');
+          bc.postMessage({ type: 'PERMISSIONS_UPDATED' });
+          bc.close();
+        }
+      } catch (_) {}
+      await reloadWorkspace();
     } catch (err: any) {
       toast(err.response?.data?.error || 'Failed to update permissions', 'error');
     } finally {

@@ -26,6 +26,7 @@ import { UserDetailDrawer } from '../components/UserDetailDrawer';
 
 const WORKSPACE_ROLES = [
   { value: 'owner', label: 'Owner', description: 'Full access to all settings, billing & workspace features' },
+  { value: 'admin', label: 'Administrator', description: 'Administrative oversight, user management & all operational modules' },
   { value: 'manager', label: 'Manager', description: 'Operations manager with broad operational & reports access' },
   { value: 'accounts', label: 'Accounts', description: 'Finance, invoices, payments, procurement & ledger' },
   { value: 'production_manager', label: 'Production Manager', description: 'BOM, manufacturing batches, stages & WIP' },
@@ -56,7 +57,7 @@ const INVITE_EXPORT_COLUMNS: ExportColumnOption[] = [
 export function UsersPage({ user }: { user: UserSummary }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { workspace } = useWorkspace();
+  const { workspace, reloadWorkspace } = useWorkspace();
   const [tab, setTab] = usePersistentTab<'members' | 'invites'>('users_page_tab', 'members');
   const [refresh, setRefresh] = useState(0);
 
@@ -190,8 +191,17 @@ export function UsersPage({ user }: { user: UserSummary }) {
         roles: selectedRoles
       });
       toast(`Roles updated for ${editingUser.name}`, 'success');
+      localStorage.setItem('erp_roles_updated_at', String(Date.now()));
+      try {
+        if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('erp_permissions_sync');
+          bc.postMessage({ type: 'ROLE_UPDATED', userId: editingUser.id });
+          bc.close();
+        }
+      } catch (_) {}
       setEditingUser(null);
       setRefresh((k) => k + 1);
+      try { await reloadWorkspace(); } catch (_) {}
     } catch (err: any) {
       toast(err.response?.data?.error || 'Failed to update user roles', 'error');
     } finally {

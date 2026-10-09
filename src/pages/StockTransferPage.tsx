@@ -11,6 +11,7 @@ import { Field } from '../components/ui/Field';
 import { Button } from '../components/ui/Button';
 import { Modal } from '../components/ui/Modal';
 import { Select } from '../components/ui/Select';
+import { usePermissions } from '../hooks/usePermissions';
 
 function StockTransferModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const toast = useToast();
@@ -382,6 +383,7 @@ function StockTransferModal({ onClose, onSaved }: { onClose: () => void; onSaved
 }
 
 export function StockTransferPage() {
+  const { canView, canCreate, canExport } = usePermissions('stock_transfers');
   const [refresh, setRefresh] = useState(0);
   const [showModal, setShowModal] = useState(false);
 
@@ -415,13 +417,22 @@ export function StockTransferPage() {
     { key: 'created_at', label: 'Date & Time', sortable: true, render: (row) => new Date(row.created_at).toLocaleString() }
   ];
 
+  if (!canView) {
+    return (
+      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <h3 className="text-base font-bold text-slate-900">Access Restricted</h3>
+        <p className="text-sm text-slate-500 mt-1">You do not have permission to view the Stock Transfers module. Contact your workspace administrator to request access.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageTitle
         icon={<ArrowLeftRight />}
         title="Stock Transfers"
         subtitle="Transfer materials and finished goods between locations with automatic paired ledger movements."
-        action={<Button icon={<Plus size={16} />} onClick={() => setShowModal(true)}>New Transfer</Button>}
+        action={canCreate ? <Button icon={<Plus size={16} />} onClick={() => setShowModal(true)}>New Transfer</Button> : undefined}
       />
 
       <DataTable
@@ -429,11 +440,12 @@ export function StockTransferPage() {
         columns={columns}
         refreshKey={refresh}
         showDateFilters={true}
+        canExport={canExport}
         emptyTitle="No stock transfers recorded"
         rowId={(row) => String(row.id || '')}
       />
 
-      {showModal ? (
+      {showModal && canCreate ? (
         <StockTransferModal onClose={() => setShowModal(false)} onSaved={() => { setRefresh((v) => v + 1); setShowModal(false); }} />
       ) : null}
     </div>

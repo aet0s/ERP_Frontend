@@ -96,12 +96,14 @@ function PartyModal({
   const handleGstinChange = (value: string) => {
     const upper = value.toUpperCase();
     clearError('gstin');
+    clearError('email');
     setForm((prev) => ({ ...prev, gstin: upper }));
   };
 
-  const checkTaxUniqueness = async (gstinVal?: string, panVal?: string) => {
+  const checkTaxUniqueness = async (gstinVal?: string, panVal?: string, emailVal?: string) => {
     const cleanG = gstinVal ? gstinVal.trim().toUpperCase() : '';
     const cleanP = panVal ? panVal.trim().toUpperCase() : '';
+    const cleanE = emailVal ? emailVal.trim().toLowerCase() : '';
     if (!cleanG && !cleanP) return true;
 
     try {
@@ -109,7 +111,9 @@ function PartyModal({
         params: {
           gstin: cleanG || undefined,
           pan: cleanP || undefined,
-          exclude_id: config.row?.id || undefined
+          email: cleanE || undefined,
+          exclude_id: config.row?.id || undefined,
+          type: config.type
         }
       });
       if (res.data && res.data.available === false) {
@@ -119,6 +123,9 @@ function PartyModal({
         }
         if (cleanP && errMsg.includes('PAN')) {
           setErrors((prev) => ({ ...prev, pan: errMsg }));
+        }
+        if (errMsg.includes('registered on the platform with email')) {
+          setErrors((prev) => ({ ...prev, email: errMsg }));
         }
         return false;
       }
@@ -325,11 +332,11 @@ function PartyModal({
 
     setSubmitting(true);
 
-    // Pre-flight check for GSTIN & PAN uniqueness across the ERP portal
-    const isTaxUnique = await checkTaxUniqueness(form.gstin, form.pan);
+    // Pre-flight check for GSTIN & PAN uniqueness across the ERP portal, plus global email alignment
+    const isTaxUnique = await checkTaxUniqueness(form.gstin, form.pan, form.email);
     if (!isTaxUnique) {
       setSubmitting(false);
-      toast('GSTIN or PAN is already registered in the ERP portal', 'error');
+      toast('Please check the highlighted GSTIN, PAN, or registered email errors', 'error');
       return;
     }
 
@@ -376,6 +383,9 @@ function PartyModal({
       }
       if (errMsg.includes('PAN')) {
         setErrors((prev) => ({ ...prev, pan: errMsg }));
+      }
+      if (errMsg.includes('registered on the platform with email')) {
+        setErrors((prev) => ({ ...prev, email: errMsg }));
       }
       toast(errMsg, 'error');
     } finally {
@@ -454,7 +464,15 @@ function PartyModal({
               type="email"
               placeholder="contact@business.com"
               value={form.email}
-              onChange={(e) => updateField('email', e.target.value)}
+              onChange={(e) => {
+                updateField('email', e.target.value);
+                clearError('email');
+              }}
+              onBlur={() => {
+                if (form.gstin) {
+                  checkTaxUniqueness(form.gstin, '', form.email);
+                }
+              }}
             />
           </Field>
         </div>
@@ -527,7 +545,7 @@ function PartyModal({
               maxLength={15}
               value={form.gstin}
               onChange={(e) => handleGstinChange(e.target.value)}
-              onBlur={() => checkTaxUniqueness(form.gstin, '')}
+              onBlur={() => checkTaxUniqueness(form.gstin, '', form.email)}
             />
             <p className="text-[11px] text-slate-400 mt-0.5">Optional for unregistered parties. Must be unique across ERP.</p>
           </Field>
@@ -764,7 +782,8 @@ export function PeoplePage() {
         link: inviteLink,
         email: inviteEmail,
         name: inviteName,
-        already_registered: res.data.already_registered,
+        invite_text: res.data.invite_text,
+        already_registered: !!inviteLink.includes('login'),
         can_reinvite: res.data.can_reinvite,
         message: res.data.message
       } as any);
@@ -830,14 +849,31 @@ export function PeoplePage() {
       key: 'actions',
       label: 'Portal Action',
       render: (row: any) => {
-        const isMember = row.portal_status === 'member' || row.connection_status === 'connected' || Number(row.portal_logged_in_count || 0) > 0;
-        const isInvited = row.portal_status === 'invited' || row.connection_status === 'invited' || Number(row.portal_users_count || 0) > 0;
+        const isMember = row.connection_status === 'connected' || row.portal_status === 'member' || Number(row.portal_logged_in_count || 0) > 0;
+        const isDeclined = row.connection_status === 'declined' || row.portal_status === 'declined';
+        const isInvited = !isDeclined && (row.connection_status === 'invited' || row.portal_status === 'invited' || Number(row.portal_users_count || 0) > 0);
 
         if (isMember) {
           return (
             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-2xs">
-              <CheckCircle2 size={12} className="text-emerald-600" /> Member
+              <CheckCircle2 size={12} className="text-emerald-600" /> Connected
             </span>
+          );
+        }
+
+        if (isDeclined) {
+          return (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                triggerPortalInvite(tab === 'vendors' ? 'vendor' : 'customer', row);
+              }}
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200 transition cursor-pointer"
+              title="Connection invitation was declined. Click to re-invite."
+            >
+              <AlertCircle size={11} className="text-rose-600" /> Declined (Re-invite)
+            </button>
           );
         }
 
@@ -850,7 +886,7 @@ export function PeoplePage() {
                 triggerPortalInvite(tab === 'vendors' ? 'vendor' : 'customer', row);
               }}
               className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 transition cursor-pointer"
-              title="Invitation sent. Click to view or resend invite link"
+              title="Invitation pending. Click to view or resend invite link"
             >
               <Clock size={11} className="text-amber-600" /> Invited
             </button>
@@ -1078,9 +1114,11 @@ export function PeoplePage() {
                   readOnly
                   className={`${inputCls} h-24 bg-slate-50 font-mono text-xs text-slate-700`}
                   value={
-                    (createdInvite as any).already_registered
-                      ? `Hello ${createdInvite.name},\n\nYou have been connected to our ${inviteTarget.type === 'vendor' ? 'Supplier Portal' : 'Customer Portal'} on ${workspace?.name || 'our platform'}.\n\nYou can log in with your existing account here:\n${createdInvite.link}`
-                      : `Hello ${createdInvite.name},\n\nYou have been invited to access our ${inviteTarget.type === 'vendor' ? 'Supplier Portal' : 'Customer Portal'} on ${workspace?.name || 'our platform'}.\n\nPlease set up your password here:\n${createdInvite.link}`
+                    (createdInvite as any).invite_text || (
+                      (createdInvite as any).already_registered
+                        ? `${workspace?.name || 'Our organization'} wants to connect with you on the ${inviteTarget.type === 'vendor' ? 'Supplier' : 'Customer'} Portal.\n\nPlease log in to review and accept the connection request:\n${createdInvite.link}`
+                        : `Hello ${createdInvite.name},\n\nYou have been invited by ${workspace?.name || 'our organization'} to access the ${inviteTarget.type === 'vendor' ? 'Supplier' : 'Customer'} Portal.\n\nPlease set up your password here:\n${createdInvite.link}`
+                    )
                   }
                 />
               </Field>

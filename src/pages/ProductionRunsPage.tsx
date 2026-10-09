@@ -1900,7 +1900,7 @@ export function ProductionRunsPage() {
   const { workspace } = useWorkspace();
   const toast = useToast();
   const confirm = useConfirm();
-  const { canCreate, canDelete, canExport } = usePermissions('production');
+  const { canView, canCreate, canDelete, canExport } = usePermissions('production');
 
   const [activeTab, setActiveTab] = usePersistentTab<'runs' | 'formulas'>('production_tab', 'runs', 'tab');
   const [showModal, setShowModal] = useState(false);
@@ -1908,6 +1908,15 @@ export function ProductionRunsPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [exportModalData, setExportModalData] = useState<any | null>(null);
+
+  if (!canView) {
+    return (
+      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <h3 className="text-base font-bold text-slate-900">Access Restricted</h3>
+        <p className="text-sm text-slate-500 mt-1">You do not have permission to view the Production module. Contact your workspace administrator to request access.</p>
+      </div>
+    );
+  }
 
   const deleteRun = async (id: string) => {
     const ok = await confirm({
