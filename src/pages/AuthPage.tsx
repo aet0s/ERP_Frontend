@@ -30,6 +30,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const F = Field;
 
+import { sanitizeRedirectPath } from '../lib/sanitizeRedirect.js';
+export { sanitizeRedirectPath };
+
+
 export function AuthPage({
   onAuth
 }: {
@@ -194,7 +198,15 @@ export function AuthPage({
         if (res.data.active_connections?.length > 0) {
           localStorage.setItem('erp_portal_active_company_id', res.data.active_connections[0].company_id);
         }
-        navigate('/portal/orders');
+        const rawRedirect = searchParams.get('redirect');
+        const safeRedirect = sanitizeRedirectPath(rawRedirect);
+        if (safeRedirect) {
+          navigate(safeRedirect);
+        } else if (res.data.pending_requests?.length > 0 && (!res.data.active_connections || res.data.active_connections.length === 0)) {
+          navigate('/portal/connections');
+        } else {
+          navigate('/portal/orders');
+        }
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Partner authentication failed. Please verify your email and password.');

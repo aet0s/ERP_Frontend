@@ -33,10 +33,12 @@ import {
 import { api } from '../lib/api';
 import { formatCurrency, formatNumber } from '../lib/utils';
 import { useToast, useWorkspace } from '../context';
+import { usePermissions } from '../hooks/usePermissions';
 import { PageTitle } from '../components/ui/PageTitle';
 import { Button } from '../components/ui/Button';
 
 export function AiAnalyticsPage() {
+  const { canView } = usePermissions('ai_analytics');
   const toast = useToast();
   const { workspace } = useWorkspace();
   const [horizon, setHorizon] = useState<number>(30);
@@ -126,6 +128,15 @@ export function AiAnalyticsPage() {
         return 'bg-slate-100 text-slate-700 border-slate-200';
     }
   };
+
+  if (!canView) {
+    return (
+      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <h3 className="text-base font-bold text-slate-900">Access Restricted</h3>
+        <p className="text-sm text-slate-500 mt-1">You do not have permission to view the AI Analytics module. Contact your workspace administrator to request access.</p>
+      </div>
+    );
+  }
 
   if (loading && !data) {
     return (

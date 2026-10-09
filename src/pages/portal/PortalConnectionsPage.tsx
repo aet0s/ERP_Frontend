@@ -93,13 +93,28 @@ export function PortalConnectionsPage() {
             {pendingRequests.map((req) => (
               <div
                 key={req.membership_id}
-                className="bg-white border border-amber-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between gap-4"
+                className={`rounded-2xl p-5 shadow-xs flex flex-col justify-between gap-4 border ${
+                  req.is_expired
+                    ? 'bg-rose-50/30 border-rose-200'
+                    : 'bg-white border-amber-200/90'
+                }`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider rounded-md">
-                      {req.portal_type === 'vendor' ? 'Vendor Link' : 'Customer Link'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-md ${
+                        req.is_expired
+                          ? 'bg-rose-100 text-rose-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {req.portal_type === 'vendor' ? 'Vendor Link' : 'Customer Link'}
+                      </span>
+                      {req.is_expired && (
+                        <span className="px-2 py-0.5 bg-rose-200/80 text-rose-900 text-[10px] font-extrabold uppercase tracking-wider rounded-md">
+                          Expired
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[11px] text-slate-400 font-mono">
                       {req.company_code}
                     </span>
@@ -107,31 +122,55 @@ export function PortalConnectionsPage() {
                   <h4 className="text-base font-bold text-slate-900">{req.company_name}</h4>
                   <p className="text-xs text-slate-500 mt-1">
                     Requested on {req.requested_at ? new Date(req.requested_at).toLocaleDateString() : 'recently'}.
+                    {req.is_expired && (
+                      <span className="block text-rose-600 font-medium mt-0.5">
+                        This invitation has expired. Contact {req.company_name} to send a new invitation.
+                      </span>
+                    )}
                   </p>
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
-                    <Clock size={12} /> Awaiting Approval / Action
-                  </span>
+                  {req.is_expired ? (
+                    <span className="text-[11px] text-rose-600 font-semibold flex items-center gap-1">
+                      <Clock size={12} /> Invitation Expired
+                    </span>
+                  ) : (
+                    <span className="text-[11px] text-amber-700 font-medium flex items-center gap-1">
+                      <Clock size={12} /> Awaiting Approval / Action
+                    </span>
+                  )}
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={actionLoading === `accept-${req.membership_id}`}
-                      onClick={() => handleAcceptInvite(req.membership_id)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actionLoading === `decline-${req.membership_id}`}
-                      onClick={() => handleDeclineInvite(req.membership_id)}
-                      className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
-                    >
-                      Decline
-                    </button>
+                    {req.is_expired ? (
+                      <button
+                        type="button"
+                        disabled={actionLoading === `decline-${req.membership_id}`}
+                        onClick={() => handleDeclineInvite(req.membership_id)}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition cursor-pointer"
+                      >
+                        Dismiss
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled={actionLoading === `accept-${req.membership_id}`}
+                          onClick={() => handleAcceptInvite(req.membership_id)}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
+                        >
+                          Accept
+                        </button>
+                        <button
+                          type="button"
+                          disabled={actionLoading === `decline-${req.membership_id}`}
+                          onClick={() => handleDeclineInvite(req.membership_id)}
+                          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+                        >
+                          Decline
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

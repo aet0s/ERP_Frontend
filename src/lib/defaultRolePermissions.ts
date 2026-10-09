@@ -42,6 +42,9 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<string, RoleActionD
   owner: {
     '*': { view: 1, create: 1, edit: 1, del: 1, approve: 1, export: 1 }
   },
+  admin: {
+    '*': { view: 1, create: 1, edit: 1, del: 1, approve: 1, export: 1 }
+  },
   manager: {
     dashboard: { view: 1, create: 0, edit: 0, del: 0, approve: 0, export: 1 },
     inventory: { view: 1, create: 1, edit: 1, del: 0, approve: 1, export: 1 },

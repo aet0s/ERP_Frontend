@@ -56,8 +56,8 @@ function MainAppRoutes() {
           setGlobalNumberSystem(res.data.workspace.number_system);
         }
         const u = res.data.user;
-        if (u && res.data.permissions && !u.permissions) {
-          u.permissions = res.data.permissions;
+        if (u) {
+          u.permissions = res.data.permissions || u.permissions || [];
         }
         setAuth({
           isAuthenticated: true,
@@ -71,7 +71,7 @@ function MainAppRoutes() {
       .finally(() => {
         setBooting(false);
       });
-  }, [isPortalPath, isSuperAdminPath, isAcceptInvitePath, location.pathname]);
+  }, [isPortalPath, isSuperAdminPath, isAcceptInvitePath]);
 
   useEffect(() => {
     if (isPortalPath || isSuperAdminPath || isAcceptInvitePath || location.pathname === '/login') return;
@@ -82,9 +82,7 @@ function MainAppRoutes() {
         .then((res) => {
           if (res.data?.user) {
             const u = res.data.user;
-            if (res.data.permissions && !u.permissions) {
-              u.permissions = res.data.permissions;
-            }
+            u.permissions = res.data.permissions || u.permissions || [];
             setAuth((prev) => ({
               ...prev,
               isAuthenticated: true,
@@ -102,18 +100,44 @@ function MainAppRoutes() {
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
+    // Instant cross-tab sync via BroadcastChannel and StorageEvent
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('erp_permissions_sync');
+        bc.onmessage = () => {
+          revalidateSession();
+        };
+      }
+    } catch (_) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'erp_permissions_updated_at' || e.key === 'erp_roles_updated_at') {
+        revalidateSession();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    // Active heartbeat check every 5 seconds for background permissions sync
     const intervalId = setInterval(() => {
       if (document.visibilityState === 'visible') {
         revalidateSession();
       }
-    }, 25000);
+    }, 5000);
+
+    // Also revalidate immediately when navigating to any page
+    revalidateSession();
 
     return () => {
       window.removeEventListener('focus', revalidateSession);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('storage', handleStorage);
+      if (bc) {
+        try { bc.close(); } catch (_) {}
+      }
       clearInterval(intervalId);
     };
-  }, [isPortalPath, isSuperAdminPath, isAcceptInvitePath]);
+  }, [isPortalPath, isSuperAdminPath, isAcceptInvitePath, location.pathname]);
 
   const handleAuth = (_token: string, user: UserSummary, workspace: Workspace) => {
     // Save the token to localStorage so the api interceptor can use it for Bearer auth

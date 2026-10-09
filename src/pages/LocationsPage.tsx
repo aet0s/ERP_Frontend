@@ -223,6 +223,15 @@ export function LocationsPage() {
     }] : [])
   ];
 
+  if (!canView) {
+    return (
+      <div className="p-12 text-center bg-white rounded-2xl border border-slate-200 shadow-xs">
+        <h3 className="text-base font-bold text-slate-900">Access Restricted</h3>
+        <p className="text-sm text-slate-500 mt-1">You do not have permission to view the Locations module. Contact your workspace administrator to request access.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageTitle
